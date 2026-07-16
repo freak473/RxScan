@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RxScan v2 — design prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ============ TOKENS ============ */
+:root{
+  --green-950:#07352C;
+  --green-900:#0A4A3E;
+  --green:#0E6E5B;           /* brand */
+  --green-soft:#E7F0EB;
+  --green-tint:#F0F5F1;
+  --paper:#FBF8F1;           /* prescription-pad white */
+  --paper-deep:#F4EFE3;
+  --paper-line:#E9E1CF;
+  --chip-paper:#FFFDF4;
+  --ink:#1E3D8F;             /* ballpoint blue — anything handwritten */
+  --ink-faint:#8A98C4;
+  --text:#17211C;
+  --muted:#5C685F;
+  --faint:#96A29A;
+  --amber:#A66A08;           /* re-check flags ONLY */
+  --amber-bg:#FBF3DD;
+  --amber-line:#EAD9A8;
+  --red:#B0503F;
+  --red-line:#E7CFC7;
+  --white:#FFFFFF;
+  --shadow-card:0 1px 2px rgba(23,33,28,.05), 0 6px 18px rgba(23,33,28,.06);
+  --shadow-pop:0 8px 30px rgba(10,40,32,.18);
+  --r-lg:20px; --r-md:16px; --r-sm:12px;
+  --font-ui:'Hanken Grotesk',system-ui,sans-serif;
+  --font-display:'Bricolage Grotesque','Hanken Grotesk',sans-serif;
+  --font-ink:'Kalam',cursive;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:var(--font-ui);
+  background:
+    radial-gradient(1100px 700px at 78% -10%, #10826B 0%, transparent 55%),
+    radial-gradient(900px 700px at -10% 110%, #0B5647 0%, transparent 55%),
+    var(--green-950);
+  color:var(--text);
+  display:flex; align-items:stretch; justify-content:center;
+  min-height:100vh; overflow-x:auto;
+}
+button{font-family:var(--font-ui)}
+button:focus-visible, input:focus-visible{outline:3px solid #7CC7B4; outline-offset:2px}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001s !important; transition-duration:.001s !important}
+}
+
+/* ============ LAYOUT: RAIL + STAGE ============ */
+.wrap{display:flex; gap:44px; padding:38px 44px; align-items:flex-start; margin:auto}
+.rail{width:288px; flex:none; color:#DCEAE2; position:sticky; top:38px}
+.rail-brand{display:flex; align-items:center; gap:12px; margin-bottom:6px}
+.rail-mark{width:42px;height:42px;border-radius:13px;background:var(--paper);display:flex;align-items:center;justify-content:center;font:700 22px var(--font-ink);color:var(--ink);box-shadow:var(--shadow-pop)}
+.rail-brand h1{font:700 24px/1 var(--font-display); letter-spacing:-.01em; color:#fff}
+.rail-brand span{display:block;font:600 11px/1.5 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:#8FBBAC}
+.rail-sub{font:500 13.5px/1.55 var(--font-ui); color:#A7C6BA; margin:10px 0 20px}
+.rail-nav{display:flex;flex-direction:column;gap:3px;margin-bottom:22px}
+.rail-nav button{
+  display:flex;align-items:center;gap:11px;border:none;background:transparent;color:#BED8CD;
+  font:600 14px var(--font-ui);padding:9px 12px;border-radius:11px;cursor:pointer;text-align:left;transition:background .15s,color .15s;
+}
+.rail-nav button .n{font:700 11px var(--font-display);color:#6FA694;width:20px;flex:none;letter-spacing:.05em}
+.rail-nav button:hover{background:rgba(255,255,255,.07);color:#fff}
+.rail-nav button.on{background:var(--paper);color:var(--green-900)}
+.rail-nav button.on .n{color:var(--green)}
+.rail-panel{background:rgba(7,42,34,.55);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:15px 16px;margin-bottom:12px}
+.rail-panel h3{font:700 11px var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:#8FBBAC;margin-bottom:10px}
+.tokens{display:flex;gap:7px;margin-bottom:10px}
+.tokens i{display:block;width:30px;height:30px;border-radius:9px;border:1px solid rgba(255,255,255,.18)}
+.rail-panel p{font:500 12.5px/1.6 var(--font-ui);color:#A7C6BA}
+.rail-panel p b{color:#E4F1EA;font-weight:700}
+.fixes{list-style:none;display:flex;flex-direction:column;gap:7px}
+.fixes li{font:500 12.5px/1.5 var(--font-ui);color:#A7C6BA;display:flex;gap:8px}
+.fixes li::before{content:"✓";color:#7CC7B4;font-weight:800;flex:none}
+
+/* ============ PHONE ============ */
+.stage{display:flex;flex-direction:column;align-items:center;gap:14px}
+.phone{
+  width:400px;height:864px;background:#0B0F0D;border-radius:52px;padding:11px;
+  box-shadow:0 40px 90px rgba(0,0,0,.5), inset 0 0 0 2px #232A26; position:relative; flex:none;
+}
+.screen-clip{width:100%;height:100%;border-radius:42px;overflow:hidden;position:relative;background:var(--paper)}
+.notch{position:absolute;top:22px;left:50%;transform:translateX(-50%);width:112px;height:29px;background:#0B0F0D;border-radius:99px;z-index:60}
+.statusbar{position:absolute;top:0;left:0;right:0;height:52px;display:flex;align-items:center;justify-content:space-between;padding:14px 30px 0;z-index:55;font:700 14px var(--font-ui);color:var(--text);pointer-events:none}
+.statusbar .sig{display:flex;gap:5px;align-items:center}
+.statusbar.light{color:#fff}
+.stage-note{font:500 13px/1.5 var(--font-ui);color:#9FC3B6;max-width:400px;text-align:center}
+.stage-note b{color:#E4F1EA}
+
+/* screens */
+.scr{position:absolute;inset:0;display:none;flex-direction:column;background:var(--paper)}
+.scr.on{display:flex}
+.scr-head{flex:none;padding:68px 22px 12px}
+.scr-body{flex:1;overflow-y:auto;padding:4px 18px 18px;scrollbar-width:none}
+.scr-body::-webkit-scrollbar{display:none}
+.scr-foot{flex:none;padding:12px 18px 26px;border-top:1px solid var(--paper-line);background:var(--paper)}
+h2.title{font:700 27px/1.15 var(--font-display);letter-spacing:-.015em;color:var(--text)}
+p.lede{font:500 15px/1.5 var(--font-ui);color:var(--muted);margin-top:7px}
+
+/* buttons */
+.btn{border:none;border-radius:var(--r-md);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .06s ease, background .15s}
+.btn:active{transform:scale(.985)}
+.btn-primary{background:var(--green);color:#fff;font:700 17px var(--font-ui);height:60px;width:100%}
+.btn-primary:hover{background:var(--green-900)}
+.btn-primary[disabled]{background:#DED8CA;color:#8D877A;cursor:not-allowed}
+.btn-ghost{background:#fff;border:1.5px solid #DCD5C6;color:var(--text);font:700 15px var(--font-ui);height:54px}
+.btn-quiet{background:transparent;color:var(--muted);font:700 14px var(--font-ui);height:44px}
+
+/* the signature: ink chip (taped paper scrap) */
+.ink-chip{
+  position:relative;display:inline-block;background:var(--chip-paper);
+  background-image:repeating-linear-gradient(transparent,transparent 26px,rgba(30,61,143,.10) 26px,rgba(30,61,143,.10) 27px);
+  border:1px solid #EAE2CC;border-radius:5px;padding:9px 16px 7px;
+  font:400 21px/1.25 var(--font-ink);color:var(--ink);
+  box-shadow:0 1px 3px rgba(23,33,28,.10), 0 4px 10px rgba(23,33,28,.05);
+  transform:rotate(-.7deg);
+}
+.ink-chip::before{ /* tape */
+  content:"";position:absolute;top:-8px;left:14px;width:46px;height:15px;
+  background:rgba(212,222,210,.6);border:1px solid rgba(160,170,158,.35);border-radius:2px;transform:rotate(-3deg);
+}
+.ink-chip.sm{font-size:18px;padding:7px 13px 5px}
+.chip-label{font:700 10.5px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:#A79B78;display:block;margin-bottom:5px}
+
+/* generic card */
+.card{background:#fff;border:1px solid #ECE6D8;border-radius:var(--r-lg);box-shadow:var(--shadow-card)}
+
+/* pills / tags */
+.tag{display:inline-flex;align-items:center;gap:6px;border-radius:99px;font:700 12px var(--font-ui);padding:5px 11px}
+.tag-ok{background:var(--green-soft);color:var(--green-900)}
+.tag-flag{background:var(--amber-bg);color:var(--amber)}
+.tag-ink{background:#EDF0FA;color:var(--ink)}
+
+/* toggle */
+.tgl{width:58px;height:33px;border-radius:99px;border:none;padding:3px;cursor:pointer;display:flex;align-items:center;background:#CBD3CD;transition:background .18s;flex:none}
+.tgl.on{background:var(--green)}
+.tgl i{width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transform:translateX(0);transition:transform .18s}
+.tgl.on i{transform:translateX(25px)}
+.tgl[disabled]{background:#E2E0D8;cursor:not-allowed}
+.tgl[disabled] i{background:#F4F2EC}
+
+/* toast */
+.toast{position:absolute;left:20px;right:20px;bottom:28px;background:var(--green-950);color:#fff;font:600 14.5px var(--font-ui);padding:15px 18px;border-radius:14px;box-shadow:var(--shadow-pop);display:flex;gap:10px;align-items:center;z-index:70;animation:rise .3s ease}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ==================== REVIEW RAIL ==================== -->
+  <aside class="rail">
+    <div class="rail-brand">
+      <div class="rail-mark">℞</div>
+      <div><h1>RxScan</h1><span>v2 design · 11 Jul 2026</span></div>
+    </div>
+    <p class="rail-sub">Ink-to-type design system. Every value the app shows stays anchored to the doctor's ink it came from.</p>
+
+    <nav class="rail-nav" id="railNav"></nav>
+
+    <div class="rail-panel">
+      <h3>Tokens</h3>
+      <div class="tokens">
+        <i style="background:#0E6E5B" title="Brand green #0E6E5B"></i>
+        <i style="background:#FBF8F1" title="Paper #FBF8F1"></i>
+        <i style="background:#1E3D8F" title="Ballpoint ink #1E3D8F"></i>
+        <i style="background:#A66A08" title="Re-check amber #A66A08"></i>
+        <i style="background:#17211C" title="Text #17211C"></i>
+      </div>
+      <p><b>Bricolage Grotesque</b> display · <b>Hanken Grotesk</b> UI · <b>Kalam</b> for ink (built for Indian handwriting). Amber is reserved for re-check flags only.</p>
+    </div>
+
+    <div class="rail-panel">
+      <h3>Fixed in this pass</h3>
+      <ul class="fixes">
+        <li>Phone + OTP sign-in on the welcome screen — only your number is kept, stored encrypted</li>
+        <li>No suggested doses anywhere — user types from the paper</li>
+        <li>Duration flag starts empty, never pre-filled</li>
+        <li>PRN copy quotes the paper; no indications, no “take…”</li>
+        <li>Lock screen is discreet by default</li>
+        <li>Under-18 toggle locks retention until guardian consent</li>
+        <li>AC/PC offsets visible; bedtime slot for HS</li>
+        <li>Dates corrected to 2026</li>
+        <li>“Ask your doctor” makes the honest-failure path actionable</li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- ==================== PHONE ==================== -->
+  <main class="stage">
+    <div class="phone">
+      <div class="screen-clip" id="clip">
+        <div class="notch"></div>
+        <div class="statusbar" id="statusbar"><span>9:41</span><span class="sig">▁▃▅▇ &nbsp;100%</span></div>
+        <!-- ============ 1 · WELCOME ============ -->
+        <section class="scr" id="scr-welcome">
+          <div class="scr-body" style="display:flex;flex-direction:column;justify-content:center;padding:60px 26px 10px">
+            <div class="hero-paper">
+              <div class="hero-rx">
+                <div class="hero-doc">DR. A. SHARMA · CITY CLINIC</div>
+                <div class="hero-rxmark">℞</div>
+                <div class="hero-ink">Augmentin 625 — 1-0-1 ×5d (a/f)<br>Pantocid 4? — 1-0-0 (b/f)<br>Ascoril LS — 1-1-1<br>Tab Dolo 650 — SOS</div>
+              </div>
+              <div class="hero-arrow">
+                <svg width="26" height="40" viewBox="0 0 26 40" fill="none" stroke="#0E6E5B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v30M5 26l8 8 8-8"/></svg>
+              </div>
+              <div class="hero-typed card">
+                <div class="hero-row"><span class="hero-dot"></span>Augmentin 625 · Morning · Night</div>
+                <div class="hero-row"><span class="hero-dot"></span>Pantocid · Morning · before food</div>
+                <div class="hero-row"><span class="hero-dot amber"></span>Ascoril LS · 3 times a day</div>
+              </div>
+            </div>
+            <h2 class="title" style="font-size:32px;margin-top:30px">Scan your prescription.<br>We’ll remind you.</h2>
+            <p class="lede" style="font-size:16px">Point the camera at the paper. We read it, <b style="color:var(--text)">you check every medicine</b>, then reminders ring for each dose — until the last day.</p>
+          </div>
+          <div class="scr-foot" style="border:none">
+            <button class="btn btn-primary" onclick="go('consent')">Get started
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <p class="footnote" style="text-align:center;margin-top:12px">Scan first — sign in only when you save your reminders · No name, no email</p>
+          </div>
+        </section>
+
+
+        <!-- ============ 6b · SIGN IN (at save) ============ -->
+        <section class="scr" id="scr-signin">
+          <div class="scr-head">
+            <div class="otp-head-row">
+              <button class="btn btn-quiet" style="height:40px;width:40px;padding:0;flex:none" onclick="go('mealtimes')" aria-label="Back">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17211C" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <div>
+                <h2 class="title">Save your reminders</h2>
+                <p class="lede">So they’re safe if you change phones. Your number is the only detail we keep — no name, no email.</p>
+              </div>
+            </div>
+          </div>
+          <div class="scr-body">
+            <div class="card" style="padding:18px">
+              <p class="field-prompt">Your mobile number</p>
+              <div class="phone-field">
+                <span class="cc">🇮🇳 +91</span>
+                <input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="98765 43210" aria-label="Mobile number" oninput="onPhoneInput()">
+              </div>
+            </div>
+            <div class="scribe-note" style="margin-top:14px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Your prescriptions are stored encrypted, and you can delete everything anytime.
+            </div>
+          </div>
+          <div class="scr-foot">
+            <button class="btn btn-primary" id="btnSendCode" onclick="sendCode()" disabled>Send code
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- ============ 6c · VERIFY NUMBER (OTP) ============ -->
+        <section class="scr" id="scr-otp">
+          <div class="scr-head">
+            <div class="otp-head-row">
+              <button class="btn btn-quiet" style="height:40px;width:40px;padding:0;flex:none" onclick="go('signin')" aria-label="Back">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17211C" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <div>
+                <h2 class="title">Enter the code</h2>
+                <p class="lede">Sent to <b style="color:var(--text)" id="sentNum">+91 98765 43210</b> · <a class="otp-change" onclick="go('signin')">Change</a></p>
+              </div>
+            </div>
+          </div>
+          <div class="scr-body">
+            <div class="otp-row" id="otpRow">
+              <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1" oninput="onOtpInput(0)" onkeydown="onOtpKey(event,0)" onpaste="onOtpPaste(event)">
+              <input inputmode="numeric" maxlength="1" aria-label="Digit 2" oninput="onOtpInput(1)" onkeydown="onOtpKey(event,1)" onpaste="onOtpPaste(event)">
+              <input inputmode="numeric" maxlength="1" aria-label="Digit 3" oninput="onOtpInput(2)" onkeydown="onOtpKey(event,2)" onpaste="onOtpPaste(event)">
+              <input inputmode="numeric" maxlength="1" aria-label="Digit 4" oninput="onOtpInput(3)" onkeydown="onOtpKey(event,3)" onpaste="onOtpPaste(event)">
+              <input inputmode="numeric" maxlength="1" aria-label="Digit 5" oninput="onOtpInput(4)" onkeydown="onOtpKey(event,4)" onpaste="onOtpPaste(event)">
+              <input inputmode="numeric" maxlength="1" aria-label="Digit 6" oninput="onOtpInput(5)" onkeydown="onOtpKey(event,5)" onpaste="onOtpPaste(event)">
+            </div>
+            <p class="otp-err" id="otpErr" role="alert"></p>
+            <p class="otp-resend">
+              <span id="otpWait">Resend code in <b id="otpTimer">0:30</b></span>
+              <button id="otpResend" style="display:none" onclick="resendOtp()">Resend code</button>
+            </p>
+            <div class="scribe-note" style="margin-top:24px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              We keep only your number — no name, no email. Your prescriptions are stored encrypted, and you can delete everything anytime.
+            </div>
+            <p class="footnote" style="margin-top:16px;text-align:center">Demo: any 6 digits verify · type <b>000000</b> to see the error state</p>
+          </div>
+          <div class="scr-foot">
+            <button class="btn btn-primary" id="btnVerifyOtp" onclick="verifyOtp()" disabled>Verify</button>
+          </div>
+        </section>
+
+
+        <!-- ============ 6d · PERMISSIONS (after OTP, before scheduling) ============ -->
+        <section class="scr" id="scr-notifperm">
+          <div class="scr-head">
+            <h2 class="title">One permission for reminders</h2>
+            <p class="lede">Android will ask next. Without it, your reminders can’t ring.</p>
+          </div>
+          <div class="scr-body">
+            <div class="card" style="padding:18px;margin-bottom:14px">
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:44px;height:44px;border-radius:13px;background:var(--green-tint);display:flex;align-items:center;justify-content:center;flex:none">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E6E5B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                </div>
+                <div><b style="font:700 16px var(--font-ui)">Notifications</b>
+                <p style="font:500 13.5px/1.5 var(--font-ui);color:var(--muted);margin-top:2px">30 dose reminders are ready to schedule. This permission is what lets them appear.</p></div>
+              </div>
+              <!-- mock Android system dialog -->
+              <div style="margin-top:14px;border:1px solid #E3DDCE;border-radius:16px;padding:16px;background:#FDFCF8">
+                <p style="font:600 14.5px/1.45 var(--font-ui)">Allow <b>RxScan</b> to send you notifications?</p>
+                <div style="display:flex;gap:8px;margin-top:13px">
+                  <button class="btn btn-primary" style="flex:1;height:46px;font-size:14.5px" onclick="permResult(true)">Allow</button>
+                  <button class="btn btn-ghost" style="flex:1;height:46px;font-size:14.5px" onclick="permResult(false)">Don’t allow</button>
+                </div>
+              </div>
+            </div>
+            <div class="card" style="padding:16px 18px;display:flex;gap:12px;align-items:center">
+              <div style="width:44px;height:44px;border-radius:13px;background:var(--green-tint);display:flex;align-items:center;justify-content:center;flex:none">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E6E5B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M5 3 2 6M19 3l3 3"/></svg>
+              </div>
+              <div style="flex:1"><b style="font:700 15px var(--font-ui)">Exact-time alarms</b>
+              <p style="font:500 12.5px/1.5 var(--font-ui);color:var(--muted);margin-top:1px">Optional · a Settings toggle so doses ring on the minute, even in battery saver. Skippable — reminders then arrive within a few minutes.</p></div>
+              <button class="tgl" id="tglExact" onclick="this.classList.toggle('on')" aria-label="Allow exact alarms"><i></i></button>
+            </div>
+            <p class="footnote" style="margin-top:14px;text-align:center">If you deny notifications, everything is still saved — Today will show how to turn them on.</p>
+          </div>
+        </section>
+
+        <!-- ============ 2 · CONSENT ============ -->
+        <section class="scr" id="scr-consent">
+          <div class="scr-head">
+            <h2 class="title">Before we start</h2>
+            <p class="lede">Two choices. You stay in control of both.</p>
+          </div>
+          <div class="scr-body">
+            <div class="card consent-row">
+              <div class="consent-txt">
+                <h4>Read this prescription</h4>
+                <p>Needed to build your reminders. The photo is discarded right after reading.</p>
+                <span class="tag tag-ok" style="margin-top:8px">Required to scan</span>
+              </div>
+              <button class="tgl" id="tglProcess" onclick="toggleConsent('process')" aria-label="Allow reading this prescription"><i></i></button>
+            </div>
+            <div class="card consent-row" id="rowRetain">
+              <div class="consent-txt">
+                <h4>Help improve accuracy</h4>
+                <p>Keep small clips of the text — never the whole prescription or your doctor’s details. Optional, off unless you turn it on.</p>
+              </div>
+              <button class="tgl" id="tglRetain" onclick="toggleConsent('retain')" aria-label="Allow keeping small text clips"><i></i></button>
+            </div>
+            <div class="card consent-row">
+              <div class="consent-txt">
+                <h4>This is for someone under 18</h4>
+                <p>A parent or guardian confirms before anything is saved.</p>
+              </div>
+              <button class="tgl" id="tglMinor" onclick="toggleConsent('minor')" aria-label="Patient is under 18"><i></i></button>
+            </div>
+            <div class="minor-note" id="minorNote" hidden>Saving text clips is switched off for under-18 patients until a parent or guardian confirms in the next step.</div>
+            <div class="scribe-note">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              RxScan records what your doctor wrote. It does not give medical advice. When in doubt, ask your doctor or pharmacist.
+            </div>
+          </div>
+          <div class="scr-foot">
+            <button class="btn btn-primary" id="btnConsent" onclick="go('capture')" disabled>Turn on the first permission</button>
+          </div>
+        </section>
+
+        <!-- ============ 3 · CAPTURE ============ -->
+        <section class="scr dark" id="scr-capture">
+          <div class="cam">
+            <div class="cam-top">Fit the whole prescription in the frame</div>
+            <div class="cam-paper">
+              <div class="cam-letterhead">Dr. A. Sharma · MBBS, MD <span>11/07/26</span></div>
+              <div class="cam-rxmark">℞</div>
+              <div class="cam-ink">Augmentin 625 — 1-0-1 ×5d (a/f)<br>Pantocid 4? — 1-0-0 (b/f)<br>Ascoril LS — 1-1-1<br>Tab Dolo 650 — SOS</div>
+              <div class="cam-sign">Dr. Sharma</div>
+            </div>
+            <div class="cam-corners"><i></i><i></i><i></i><i></i></div>
+            <div class="cam-hint"><span class="cam-ok">●</span> Good light · hold steady</div>
+            <div class="cam-bottom">
+              <p>Tap the shutter · you’ll check everything next</p>
+              <button class="shutter" onclick="startExtraction()" aria-label="Scan prescription"><i></i></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 4 · EXTRACTING ============ -->
+        <section class="scr" id="scr-extracting">
+          <div class="scr-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px">
+            <div class="xt-paper">
+              <div class="cam-letterhead" style="color:#B9AE8F">Dr. A. Sharma · MBBS, MD <span>11/07/26</span></div>
+              <div class="cam-ink" style="color:var(--ink);font-size:19px">Augmentin 625 — 1-0-1 ×5d (a/f)<br>Pantocid 4? — 1-0-0 (b/f)<br>Ascoril LS — 1-1-1<br>Tab Dolo 650 — SOS</div>
+              <div class="xt-line"></div>
+            </div>
+            <div style="text-align:center">
+              <h2 class="title" style="font-size:23px">Reading your prescription…</h2>
+              <p class="lede">Usually takes a few seconds.</p>
+            </div>
+            <ul class="xt-steps" id="xtSteps">
+              <li data-step="0">Reading the paper</li>
+              <li data-step="1">Finding your medicines</li>
+              <li data-step="2">Checking names against the drug list</li>
+              <li data-step="3">Preparing your check-list</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- ============ 5 · VERIFY ============ -->
+        <section class="scr" id="scr-verify">
+          <div class="scr-head" style="padding-bottom:8px">
+            <h2 class="title">Check each medicine</h2>
+            <p class="lede">Compare with your paper. Nothing is scheduled until you confirm all four.</p>
+            <div class="vf-progress"><div class="vf-bar"><i id="vfBar"></i></div><span id="vfCount">0 of 4 confirmed</span></div>
+          </div>
+          <div class="scr-body" id="verifyList"></div>
+          <div class="scr-foot">
+            <div class="scribe-note slim">Confirm against your paper. When in doubt, ask your doctor or pharmacist.</div>
+            <button class="btn btn-primary" id="btnVerify" onclick="go('mealtimes')" disabled>Confirm each medicine to continue</button>
+          </div>
+        </section>
+
+        <!-- ============ 6 · MEAL TIMES ============ -->
+        <section class="scr" id="scr-mealtimes">
+          <div class="scr-head">
+            <h2 class="title">When do you eat?</h2>
+            <p class="lede">Reminders follow your meals — <b style="color:var(--text)">before-food</b> medicines ring 30 minutes before, <b style="color:var(--text)">after-food</b> 30 minutes after.</p>
+          </div>
+          <div class="scr-body" id="mealList"></div>
+          <div class="scr-foot">
+            <button class="btn btn-primary" onclick="startSave()">Set my reminders</button>
+          </div>
+        </section>
+
+        <!-- ============ 7 · TODAY ============ -->
+        <section class="scr" id="scr-home">
+          <div class="scr-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+            <div>
+              <p class="home-date">Saturday, 11 July</p>
+              <h2 class="title">Today</h2>
+            </div>
+            <button class="btn btn-quiet" style="height:40px;padding:0 4px" onclick="go('courseend')" aria-label="Open progress">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6E5B" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg>
+            </button>
+          </div>
+          <div class="scr-body" id="homeBody"></div>
+          <div class="scr-foot" style="display:flex;gap:10px">
+            <button class="btn btn-ghost" style="flex:1" onclick="go('capture')">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v2M21 16v2a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg>
+              Scan new
+            </button>
+            <button class="btn btn-ghost" style="flex:1" onclick="go('lockscreen')">Preview a reminder</button>
+          </div>
+        </section>
+
+        <!-- ============ 8 · LOCK SCREEN ============ -->
+        <section class="scr dark" id="scr-lockscreen">
+          <div class="lock">
+            <div class="lock-clock">9:00</div>
+            <div class="lock-date">Saturday, 11 July</div>
+            <div class="lock-notif card">
+              <div class="lock-notif-head">
+                <span class="lock-app"><i>℞</i> RxScan</span><span>now</span>
+              </div>
+              <h4>Night medicines · 2 due</h4>
+              <p>Open to see them and check off.</p>
+              <div class="lock-actions">
+                <button onclick="lockAction('open')">Open</button>
+                <button onclick="lockAction('snooze')">Snooze 30m</button>
+              </div>
+            </div>
+            <p class="lock-note">Medicine names stay hidden on the lock screen.<br>You can show them in Settings.</p>
+            <div class="lock-foot">Reminders ring even without internet</div>
+          </div>
+        </section>
+
+        <!-- ============ 9 · PROGRESS ============ -->
+        <section class="scr" id="scr-courseend">
+          <div class="scr-head" style="display:flex;align-items:flex-start;gap:12px">
+            <button class="btn btn-quiet" style="height:40px;width:40px;padding:0;flex:none" onclick="go('home')" aria-label="Back to Today">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17211C" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <div>
+              <h2 class="title">Your progress</h2>
+              <p class="lede">Day 3 of 5 · preview</p>
+            </div>
+          </div>
+          <div class="scr-body">
+            <div class="card endcard">
+              <div class="endcard-ic">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6E5B" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18M9 15.5l2 2 4-4"/></svg>
+              </div>
+              <div>
+                <h4>Courses end Wednesday, 15 July</h4>
+                <p>Reminders stop by themselves after the last dose. We’ll tell you the day before.</p>
+              </div>
+            </div>
+            <div id="courseList"></div>
+            <div class="card prn-log">
+              <div>
+                <h4>Dolo 650 · when needed</h4>
+                <p>As written: <span class="prn-ink">SOS</span> · no scheduled reminders</p>
+              </div>
+              <button class="btn btn-ghost" style="height:44px;padding:0 16px;font-size:14px" onclick="toast('Dose logged — 9:00 PM')">Log a dose</button>
+            </div>
+          </div>
+          <div class="scr-foot" style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-primary" style="height:54px;font-size:16px" onclick="shareSheet('report')">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+              Send to your doctor
+            </button>
+            <div style="display:flex;gap:10px">
+            <button class="btn btn-ghost" style="flex:1" onclick="toast('Schedule + history exported')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>
+              Export
+            </button>
+            <button class="btn btn-ghost" style="flex:1;color:var(--red);border-color:var(--red-line)" onclick="toast('All data deleted from this phone')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+              Delete all
+            </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <p class="stage-note" id="stageNote"></p>
+  </main>
+</div>
+
+<style>
+/* ============ SCREEN-SPECIFIC ============ */
+.footnote{font:600 12.5px var(--font-ui);color:var(--faint)}
+
+/* welcome hero */
+.hero-paper{display:flex;flex-direction:column;align-items:center;gap:10px}
+.hero-rx{width:250px;background:var(--chip-paper);border:1px solid #EAE2CC;border-radius:8px;padding:16px 18px 14px;box-shadow:0 2px 6px rgba(23,33,28,.08),0 12px 26px rgba(23,33,28,.08);transform:rotate(-1.4deg);background-image:repeating-linear-gradient(transparent,transparent 27px,rgba(30,61,143,.08) 27px,rgba(30,61,143,.08) 28px)}
+.hero-doc{font:700 9.5px var(--font-ui);letter-spacing:.12em;color:#B9AE8F;border-bottom:1.5px solid #E3D9C0;padding-bottom:7px;margin-bottom:8px}
+.hero-rxmark{font:700 20px var(--font-ink);color:#B9AE8F}
+.hero-ink{font:400 16.5px/1.7 var(--font-ink);color:var(--ink)}
+.hero-arrow{animation:nudge 2.2s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+.hero-typed{width:270px;padding:12px 16px;display:flex;flex-direction:column;gap:9px;transform:rotate(.5deg)}
+.hero-row{display:flex;align-items:center;gap:9px;font:700 13.5px var(--font-ui);color:var(--text)}
+.hero-dot{width:9px;height:9px;border-radius:50%;background:var(--green);flex:none}
+.hero-dot.amber{background:var(--amber)}
+
+/* welcome — phone entry */
+.field-prompt{font:700 13px var(--font-ui);color:var(--muted);text-align:center;margin-bottom:10px;letter-spacing:.01em}
+.phone-field{display:flex;gap:10px;margin-bottom:12px}
+.phone-field .cc{display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #DCD5C6;border-radius:var(--r-md);padding:0 15px;height:60px;font:700 16px var(--font-ui);color:var(--text);white-space:nowrap}
+.phone-field input{flex:1;min-width:0;background:#fff;border:1.5px solid #DCD5C6;border-radius:var(--r-md);padding:0 16px;height:60px;font:700 18px var(--font-ui);letter-spacing:.06em;color:var(--text)}
+.phone-field input::placeholder{color:var(--faint);font-weight:600;letter-spacing:.04em}
+.phone-field input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(14,110,91,.15)}
+
+/* otp */
+.otp-head-row{display:flex;align-items:flex-start;gap:12px}
+.otp-change{color:var(--green);font-weight:700;cursor:pointer;text-decoration:none}
+.otp-row{display:flex;gap:9px;margin:6px 0}
+.otp-row input{flex:1;width:0;height:66px;background:#fff;border:1.5px solid #DCD5C6;border-radius:var(--r-md);text-align:center;font:700 28px var(--font-display);color:var(--text);transition:border-color .15s,background .15s}
+.otp-row input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(14,110,91,.15);background:#fff}
+.otp-row input.filled{border-color:var(--green);background:var(--green-tint)}
+.otp-row input.err{border-color:var(--red);background:#FBEEEA;animation:shake .3s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.otp-err{font:700 13.5px var(--font-ui);color:var(--red);min-height:18px;margin:12px 2px 0}
+.otp-resend{font:600 14px var(--font-ui);color:var(--muted);margin-top:22px}
+.otp-resend b{color:var(--green-900);font-weight:800;font-variant-numeric:tabular-nums}
+.otp-resend button{appearance:none;background:none;border:none;padding:0;cursor:pointer;color:var(--green);font:800 14px var(--font-ui)}
+
+/* consent */
+.consent-row{display:flex;gap:14px;align-items:flex-start;padding:18px;margin-bottom:11px}
+.consent-txt{flex:1}
+.consent-txt h4{font:700 17px var(--font-ui);color:var(--text)}
+.consent-txt p{font:500 14px/1.5 var(--font-ui);color:var(--muted);margin-top:3px}
+.consent-row.locked{opacity:.55}
+.minor-note{font:600 13.5px/1.5 var(--font-ui);color:#7c6320;background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:12px;padding:12px 14px;margin-bottom:11px;animation:fadeIn .25s ease}
+.scribe-note{display:flex;gap:10px;font:600 13.5px/1.5 var(--font-ui);color:var(--green-900);background:var(--green-soft);border-radius:14px;padding:14px 15px;margin-top:6px}
+.scribe-note.slim{margin:0 0 11px;padding:11px 13px;font-size:12.5px;border-radius:11px}
+
+/* capture */
+.scr.dark{background:#10140F}
+.cam{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;padding:76px 22px 30px;background:radial-gradient(140% 90% at 50% 30%, #232B23 0%, #10140F 70%)}
+.cam-top{font:600 14px var(--font-ui);color:#C9D4C9;margin-bottom:22px}
+.cam-paper{width:272px;background:#F6F1E2;border-radius:6px;padding:18px 20px 16px;box-shadow:0 18px 50px rgba(0,0,0,.55);transform:rotate(-1deg);background-image:repeating-linear-gradient(transparent,transparent 29px,rgba(30,61,143,.09) 29px,rgba(30,61,143,.09) 30px)}
+.cam-letterhead{font:700 10px var(--font-ui);letter-spacing:.1em;color:#A2977B;display:flex;justify-content:space-between;border-bottom:1.5px solid #DFD5BA;padding-bottom:8px;margin-bottom:10px}
+.cam-rxmark{font:700 22px var(--font-ink);color:#A2977B}
+.cam-ink{font:400 18px/1.85 var(--font-ink);color:#27418f}
+.cam-sign{font:700 20px var(--font-ink);color:#27418f;text-align:right;margin-top:10px;transform:rotate(-4deg)}
+.cam-corners i{position:absolute;width:34px;height:34px;border:3.5px solid #7CC7B4;border-radius:4px}
+.cam-corners i:nth-child(1){top:120px;left:34px;border-right:none;border-bottom:none}
+.cam-corners i:nth-child(2){top:120px;right:34px;border-left:none;border-bottom:none}
+.cam-corners i:nth-child(3){top:472px;left:34px;border-right:none;border-top:none}
+.cam-corners i:nth-child(4){top:472px;right:34px;border-left:none;border-top:none}
+.cam-hint{margin-top:24px;font:700 13.5px var(--font-ui);color:#C9D4C9;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:9px 16px;border-radius:99px;display:flex;gap:8px;align-items:center}
+.cam-ok{color:#7CC7B4;font-size:10px}
+.cam-bottom{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:16px}
+.cam-bottom p{font:600 13px var(--font-ui);color:#8FA08F}
+.shutter{width:76px;height:76px;border-radius:50%;border:4px solid #E7EFE7;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.shutter i{width:58px;height:58px;border-radius:50%;background:#F3EFE6;display:block;transition:transform .1s}
+.shutter:active i{transform:scale(.9)}
+
+/* extracting */
+.xt-paper{position:relative;width:266px;background:#FBF7EA;border-radius:6px;padding:16px 18px;overflow:hidden;box-shadow:var(--shadow-card);background-image:repeating-linear-gradient(transparent,transparent 29px,rgba(30,61,143,.08) 29px,rgba(30,61,143,.08) 30px)}
+.xt-line{position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,transparent,#0E6E5B,transparent);box-shadow:0 0 18px 4px rgba(14,110,91,.45);animation:scan 2.6s ease-in-out infinite}
+@keyframes scan{0%,100%{top:8%}50%{top:88%}}
+.xt-steps{list-style:none;display:flex;flex-direction:column;gap:11px;width:266px}
+.xt-steps li{display:flex;align-items:center;gap:11px;font:600 14.5px var(--font-ui);color:var(--faint);transition:color .25s}
+.xt-steps li::before{content:"";width:20px;height:20px;flex:none;border-radius:50%;border:2px solid #D8D2C2;transition:all .25s}
+.xt-steps li.doing{color:var(--text)}
+.xt-steps li.doing::before{border-color:var(--green);border-top-color:transparent;animation:spin .8s linear infinite}
+.xt-steps li.done{color:var(--green-900)}
+.xt-steps li.done::before{border-color:var(--green);background:var(--green) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>') center/12px no-repeat}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* verify */
+.vf-progress{display:flex;align-items:center;gap:12px;margin-top:14px}
+.vf-bar{flex:1;height:7px;border-radius:99px;background:#E8E2D3;overflow:hidden}
+.vf-bar i{display:block;height:100%;width:0;background:var(--green);border-radius:99px;transition:width .3s ease}
+.vf-progress span{font:700 12.5px var(--font-ui);color:var(--muted);flex:none}
+.med-card{margin-bottom:13px;overflow:hidden}
+.med-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 16px 0}
+.med-name{font:700 20px/1.2 var(--font-display);letter-spacing:-.01em}
+.med-name small{display:block;font:600 13px var(--font-ui);color:var(--muted);margin-top:2px}
+.med-chip{padding:12px 16px 2px}
+.med-grid{padding:6px 16px 4px}
+.med-row{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid #F3EEE2;font:700 15px var(--font-ui)}
+.med-row:last-child{border-bottom:none}
+.med-row svg{color:var(--green);flex:none}
+.med-row .lbl{font:600 11px var(--font-ui);letter-spacing:.09em;text-transform:uppercase;color:var(--faint);display:block}
+.med-row .unset{color:var(--amber)}
+.flagbox{margin:6px 16px 6px;background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:14px;padding:14px;animation:fadeIn .25s ease}
+.flagbox h5{display:flex;align-items:center;gap:8px;font:700 14.5px var(--font-ui);color:var(--amber)}
+.flagbox p{font:500 13px/1.5 var(--font-ui);color:#7c6320;margin:6px 0 11px}
+.flag-input{display:flex;gap:9px}
+.flag-input input{flex:1;height:52px;border:1.5px solid var(--amber-line);border-radius:12px;padding:0 14px;font:700 16px var(--font-ui);color:var(--text);background:#fff}
+.flag-input input::placeholder{color:#B9AB84;font-weight:500}
+.flag-input button{width:86px;height:52px;border:none;border-radius:12px;background:var(--green);color:#fff;font:700 15px var(--font-ui);cursor:pointer}
+.flag-input button[disabled]{background:#DBD3BF;cursor:not-allowed}
+.med-actions{display:flex;gap:10px;padding:12px 16px 16px}
+.round-btn{width:54px;height:54px;border:1.5px solid #DCD5C6;border-radius:14px;background:#fff;color:var(--green);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.btn-confirm{flex:1;height:54px;border:none;border-radius:14px;background:var(--green);color:#fff;font:700 16.5px var(--font-ui);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-confirm[disabled]{background:#EFE8D8;color:var(--amber);cursor:not-allowed}
+.med-card.confirmed{border-color:#CFE2D6}
+.med-confirmed-bar{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--green-soft)}
+.med-confirmed-bar span{display:flex;align-items:center;gap:8px;font:700 14.5px var(--font-ui);color:var(--green-900)}
+.med-confirmed-bar button{border:none;background:transparent;font:700 13.5px var(--font-ui);color:var(--green);cursor:pointer;text-decoration:underline}
+.prn-note{margin:2px 16px 14px;font:600 13px/1.5 var(--font-ui);color:var(--muted);background:var(--green-tint);border-radius:11px;padding:10px 13px}
+.add-med{width:100%;height:52px;border:1.5px dashed #CFC8B8;border-radius:16px;background:transparent;color:var(--muted);font:700 15px var(--font-ui);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px}
+
+/* meals */
+.meal-row{display:flex;align-items:center;gap:13px;padding:16px;margin-bottom:11px}
+.meal-ic{width:46px;height:46px;border-radius:13px;background:var(--green-tint);display:flex;align-items:center;justify-content:center;flex:none;font-size:21px}
+.meal-txt{flex:1}
+.meal-txt h4{font:700 16.5px var(--font-ui)}
+.meal-txt p{font:600 12.5px var(--font-ui);color:var(--faint);margin-top:1px}
+.meal-time{font:700 18px var(--font-display);width:84px;text-align:center;flex:none}
+.step-btn{width:42px;height:42px;border:1.5px solid #DCD5C6;border-radius:12px;background:#fff;color:var(--text);font:700 22px var(--font-ui);cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center}
+.meal-note{font:600 12.5px/1.55 var(--font-ui);color:var(--faint);padding:2px 6px 0}
+
+/* home */
+.home-date{font:700 12px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--green)}
+.next-card{background:var(--green);color:#fff;border-radius:var(--r-lg);padding:18px;margin-bottom:16px;box-shadow:0 10px 26px rgba(14,110,91,.30)}
+.next-card .eyebrow{font:700 11px var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:#A8D8CA}
+.next-card h3{font:700 24px/1.15 var(--font-display);margin:6px 0 2px}
+.next-card p{font:600 14px var(--font-ui);color:#CBE8DE}
+.time-group{margin-bottom:6px}
+.time-head{display:flex;align-items:center;gap:10px;padding:10px 4px 8px}
+.time-head b{font:700 15px var(--font-display)}
+.time-head span{font:600 12px var(--font-ui);color:var(--faint)}
+.time-head::after{content:"";flex:1;height:1px;background:var(--paper-line)}
+.dose{display:flex;align-items:center;gap:12px;padding:13px 14px;margin-bottom:9px;cursor:pointer;border:1px solid #ECE6D8;border-radius:var(--r-md);background:#fff;width:100%;text-align:left;font-family:var(--font-ui)}
+.dose:hover{border-color:#CFE2D6}
+.dose-pill{width:38px;height:38px;border-radius:11px;background:var(--green-tint);display:flex;align-items:center;justify-content:center;flex:none;color:var(--green)}
+.dose-txt{flex:1}
+.dose-txt b{font:700 15.5px var(--font-ui);display:block}
+.dose-txt span{font:600 12.5px var(--font-ui);color:var(--muted)}
+.dose-state{font:700 13px var(--font-ui);flex:none;display:flex;align-items:center;gap:6px}
+.st-taken{color:var(--green)} .st-pending{color:var(--faint)} .st-skip{color:var(--red)} .st-snooze{color:#8A968F}
+.adherence{display:flex;align-items:center;gap:12px;padding:14px 16px;margin:8px 0 4px}
+.adherence b{font:700 15px var(--font-ui)}
+.adherence .vf-bar{height:8px}
+
+/* dose sheet */
+.sheet-veil{position:absolute;inset:0;background:rgba(10,20,16,.45);z-index:80;display:flex;align-items:flex-end;animation:fadeIn .2s ease}
+.sheet{background:var(--paper);border-radius:26px 26px 0 0;width:100%;padding:20px 20px 30px;animation:rise .25s ease}
+.sheet-grip{width:44px;height:5px;border-radius:99px;background:#D8D2C2;margin:0 auto 16px}
+.sheet h3{font:700 21px var(--font-display)}
+.sheet p{font:600 14px var(--font-ui);color:var(--muted);margin:3px 0 18px}
+.sheet-actions{display:flex;gap:10px}
+.sheet-actions .btn{flex:1;height:58px;font-size:15.5px}
+.sheet-actions .take{background:var(--green);color:#fff;font-weight:700}
+.sheet-actions .skip{color:var(--red);border-color:var(--red-line)}
+
+/* lock screen */
+.lock{flex:1;display:flex;flex-direction:column;align-items:center;padding:96px 22px 34px;background:linear-gradient(180deg,#0D2B24 0%, #123B31 55%, #0D2B24 100%);color:#fff}
+.lock-clock{font:600 76px/1 var(--font-display);letter-spacing:-.02em}
+.lock-date{font:600 15px var(--font-ui);color:#9FC3B6;margin:8px 0 34px}
+.lock-notif{width:100%;padding:16px;color:var(--text)}
+.lock-notif-head{display:flex;justify-content:space-between;font:700 12px var(--font-ui);color:var(--faint);margin-bottom:9px}
+.lock-app{display:flex;align-items:center;gap:7px;color:var(--green-900)}
+.lock-app i{width:20px;height:20px;border-radius:6px;background:var(--green);color:#fff;font:700 12px var(--font-ink);display:inline-flex;align-items:center;justify-content:center;font-style:normal}
+.lock-notif h4{font:700 17px var(--font-ui)}
+.lock-notif p{font:500 14px var(--font-ui);color:var(--muted);margin:3px 0 13px}
+.lock-actions{display:flex;gap:9px}
+.lock-actions button{flex:1;height:46px;border:1.5px solid #DCD5C6;border-radius:12px;background:#fff;font:700 14.5px var(--font-ui);color:var(--text);cursor:pointer}
+.lock-actions button:first-child{background:var(--green);border-color:var(--green);color:#fff}
+.lock-note{font:500 12.5px/1.6 var(--font-ui);color:#7FA99A;text-align:center;margin-top:16px}
+.lock-foot{margin-top:auto;font:600 12.5px var(--font-ui);color:#7FA99A;display:flex;align-items:center;gap:7px}
+
+/* progress */
+.endcard{display:flex;gap:13px;padding:16px;margin-bottom:14px}
+.endcard-ic{width:46px;height:46px;border-radius:13px;background:var(--green-tint);display:flex;align-items:center;justify-content:center;flex:none}
+.endcard h4{font:700 16px var(--font-ui)}
+.endcard p{font:500 13.5px/1.5 var(--font-ui);color:var(--muted);margin-top:2px}
+.course-med{padding:15px 16px;margin-bottom:11px}
+.course-med h4{font:700 16px var(--font-ui)}
+.course-med p{font:600 12.5px var(--font-ui);color:var(--muted);margin:2px 0 11px}
+.dots{display:flex;gap:8px}
+.dots i{flex:1;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font:700 10.5px var(--font-ui)}
+.d-done{background:var(--green);color:#fff}
+.d-miss{background:#F2DCD5;color:var(--red)}
+.d-today{background:#fff;border:2px solid var(--green);color:var(--green-900)}
+.d-up{background:#EEE9DC;color:#A29B8A}
+.prn-log{display:flex;align-items:center;gap:12px;padding:15px 16px;margin-top:3px}
+.prn-log h4{font:700 15.5px var(--font-ui)}
+.prn-log p{font:600 12.5px var(--font-ui);color:var(--muted);margin-top:2px}
+.prn-log > div{flex:1}
+.prn-ink{font:700 15px var(--font-ink);color:var(--ink)}
+.ask-doc{width:100%;margin-top:9px;height:46px;border:1.5px solid var(--amber-line);border-radius:12px;background:#fff;color:#7c6320;font:700 14px var(--font-ui);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.share-opt{display:flex;align-items:center;gap:13px;width:100%;padding:14px 6px;border:none;border-bottom:1px solid var(--paper-line);background:transparent;font:700 15.5px var(--font-ui);color:var(--text);cursor:pointer;text-align:left}
+.share-opt:last-of-type{border-bottom:none}
+.share-opt i{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:19px;flex:none;color:#fff}
+.share-attach{background:var(--green-tint);border-radius:12px;padding:11px 13px;font:600 13px/1.5 var(--font-ui);color:var(--muted);margin-bottom:12px;display:flex;gap:10px;align-items:flex-start}
+</style>
+
+<script>
+/* ==================== DATA ==================== */
+const meds = [
+  { id:'m1', name:'Augmentin 625 Duo', strength:'625 mg',
+    ink:'Augmentin 625 — 1-0-1 ×5d (a/f)',
+    schedule:'Morning · Night', food:'After food', duration:'5 days · ends Wed, 15 Jul',
+    aloud:'Augmentin 625. Your prescription says: morning and night, after food, for 5 days.',
+    flag:null },
+  { id:'m2', name:'Pantocid', strength:null,
+    ink:'Pantocid 4? — 1-0-0 (b/f)',
+    schedule:'Morning', food:'Before food', duration:'5 days · ends Wed, 15 Jul',
+    aloud:'Pantocid. Your prescription says: morning, before food, for 5 days. Please check the strength on your paper.',
+    flag:{ kind:'strength', title:'We couldn’t read the strength',
+      body:'Type exactly what’s written on your paper. If you can’t read it either, ask your pharmacist or doctor — we never guess doses.',
+      placeholder:'e.g. what the paper says', unit:'' } },
+  { id:'m3', name:'Ascoril LS', strength:'2.5 ml',
+    ink:'Ascoril LS — 1-1-1',
+    schedule:'Morning · Afternoon · Night', food:'After food', duration:null,
+    aloud:'Ascoril L S. Your prescription says: morning, afternoon and night, after food. Please check the number of days on your paper.',
+    flag:{ kind:'duration', title:'How many days?',
+      body:'The number of days wasn’t clear. If it’s written on your paper, enter it. If it isn’t, ask your doctor before setting one.',
+      placeholder:'days', unit:'days' } },
+  { id:'m4', name:'Dolo 650', strength:'650 mg', prn:true,
+    ink:'Tab Dolo 650 — SOS',
+    schedule:'When needed (SOS)', food:'As written', duration:'No fixed course',
+    aloud:'Dolo 650. Your prescription says: when needed. No reminders will be scheduled for this one.',
+    flag:null }
+];
+
+const slots = [
+  { key:'breakfast', label:'Breakfast', hint:'Morning medicines', time:480, emoji:'🌤' },
+  { key:'lunch',     label:'Lunch',     hint:'Afternoon medicines', time:810, emoji:'☀️' },
+  { key:'dinner',    label:'Dinner',    hint:'Night medicines', time:1230, emoji:'🌙' },
+  { key:'bedtime',   label:'Bedtime',   hint:'For medicines marked HS — none today', time:1350, emoji:'🛏' }
+];
+
+/* today’s doses, derived from meals: before food = meal −30m, after food = meal +30m */
+const doses = [
+  { id:'d1', med:'Pantocid 40', sub:'1 tablet · 30 min before breakfast', offset:-30, slot:'breakfast', status:'taken' },
+  { id:'d2', med:'Augmentin 625', sub:'1 tablet · after breakfast', offset:30, slot:'breakfast', status:'taken' },
+  { id:'d3', med:'Ascoril LS', sub:'2.5 ml · after breakfast', offset:30, slot:'breakfast', status:'taken' },
+  { id:'d4', med:'Ascoril LS', sub:'2.5 ml · after lunch', offset:30, slot:'lunch', status:'taken' },
+  { id:'d5', med:'Augmentin 625', sub:'1 tablet · after dinner', offset:30, slot:'dinner', status:'pending' },
+  { id:'d6', med:'Ascoril LS', sub:'2.5 ml · after dinner', offset:30, slot:'dinner', status:'pending' }
+];
+
+const courses = [
+  { name:'Augmentin 625 Duo', sub:'Morning · Night · after food', days:['done','done','today','up','up'] },
+  { name:'Pantocid 40', sub:'Morning · before food', days:['done','done','today','up','up'] },
+  { name:'Ascoril LS', sub:'Morning · Afternoon · Night', days:['done','miss','today','up','up'] }
+];
+
+const state = {
+  screen:'welcome',
+  consent:{ process:false, retain:false, minor:false },
+  confirmed:{}, resolved:{},           // per-med verify state
+  meals:{ breakfast:480, lunch:810, dinner:1230, bedtime:1350 },
+  doseStatus:Object.fromEntries(doses.map(d=>[d.id,d.status])),
+  sheet:null
+};
+
+/* ==================== HELPERS ==================== */
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fmt(mins){ let h=Math.floor(mins/60), m=mins%60, ap=h>=12?'PM':'AM', hh=h%12||12; return hh+':'+String(m).padStart(2,'0')+' '+ap; }
+let timers=[];
+function clearTimers(){ timers.forEach(clearTimeout); timers=[]; }
+function speak(t){ try{ if(!window.speechSynthesis) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.rate=.92; speechSynthesis.speak(u);}catch(e){} }
+function toast(msg){ const old=$('.toast'); if(old) old.remove();
+  const el=document.createElement('div'); el.className='toast';
+  el.innerHTML='<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#7CC7B4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'+esc(msg);
+  $('#clip').appendChild(el); timers.push(setTimeout(()=>el.remove(),3200)); }
+
+/* ==================== NAV ==================== */
+const screens = [
+  ['welcome','Welcome'], ['consent','Consent'], ['capture','Scan'], ['extracting','Reading'],
+  ['verify','Verify'], ['mealtimes','Meal times'], ['signin','Sign in · at save'], ['otp','Verify number'], ['notifperm','Permissions'],
+  ['home','Today'], ['lockscreen','Reminder'], ['courseend','Progress']
+];
+const notes = {
+  welcome:'The hero states the contract: <b>we read, you check, then we remind</b>. No sign-in here — the first ask is the camera, not a phone number (Q13: account at save).',
+  otp:'One-time code verifies the number and creates the account on first entry. On success the reminders schedule <b>immediately</b> — the ask-reward loop is seconds long.',
+  consent:'Two separate opt-ins, retention off by default. The under-18 toggle <b>locks retention</b> until a guardian confirms.',
+  capture:'Framing guide, glare/steadiness hint. The paper’s ink is the visual star from the first screen.',
+  extracting:'Honest progress — the steps name what actually happens, including the drug-list check.',
+  verify:'Hard gate. Flags never suggest a value: <b>the user types what the paper says</b> — or sends the crop to their doctor via the native share sheet. Amber only ever means “re-check”.',
+  signin:'Deferred sign-in (Q13 closed): the user has already seen the extraction work and verified it — now the ask has a visible purpose: keeping the reminders safe. Phone is the only detail collected.',
+  notifperm:'Permission priming at the moment of visible purpose: 30 reminders are one tap away, so the ask is legible. The system dialog is a two-refusal resource — never spent cold at app launch. Exact alarms are the separate, skippable second step; denial still saves everything and Today explains recovery.',
+  mealtimes:'AC/PC made concrete: before-food rings 30 min before the meal. Bedtime slot covers HS medicines.',
+  home:'Doses grouped by actual ring time (derived from meals), not abstract slots.',
+  lockscreen:'Discreet by default — a count, not medicine names. Names can be enabled in Settings.',
+  courseend:'Courses auto-stop; day-before notice. <b>Send to your doctor</b> shares the adherence report device-to-doctor (WhatsApp/SMS/email) — RxScan’s servers never touch it. Export and full delete stay one tap.'
+};
+function go(k){
+  clearTimers(); if(window.speechSynthesis) speechSynthesis.cancel();
+  state.screen=k; state.sheet=null;
+  document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
+  $('#scr-'+k).classList.add('on');
+  $('#statusbar').classList.toggle('light', k==='capture');
+  $('#statusbar').style.display = (k==='lockscreen') ? 'none' : 'flex';
+  renderRail(); $('#stageNote').innerHTML = notes[k]||'';
+  if(k==='otp'){ startOtpTimer(); setTimeout(()=>{ const b=document.querySelector('#otpRow input'); if(b) b.focus(); },140); }
+  if(k==='verify') renderVerify();
+  if(k==='mealtimes') renderMeals();
+  if(k==='home') renderHome();
+  if(k==='courseend') renderCourses();
+}
+function renderRail(){
+  $('#railNav').innerHTML = screens.map(([k,label],i)=>
+    `<button class="${state.screen===k?'on':''}" onclick="${k==='extracting'?'startExtraction()':`go('${k}')`}">
+       <span class="n">${String(i+1).padStart(2,'0')}</span>${label}</button>`).join('');
+}
+
+/* ==================== CONSENT ==================== */
+function toggleConsent(k){
+  if(k==='retain' && state.consent.minor) return;
+  state.consent[k]=!state.consent[k];
+  if(k==='minor' && state.consent.minor) state.consent.retain=false;
+  renderConsent();
+}
+function renderConsent(){
+  const c=state.consent;
+  $('#tglProcess').classList.toggle('on',c.process);
+  $('#tglRetain').classList.toggle('on',c.retain);
+  $('#tglMinor').classList.toggle('on',c.minor);
+  $('#tglRetain').disabled = c.minor;
+  $('#rowRetain').classList.toggle('locked', c.minor);
+  $('#minorNote').hidden = !c.minor;
+  const b=$('#btnConsent'); b.disabled=!c.process;
+  b.textContent = c.process ? 'Agree & continue' : 'Turn on the first permission';
+}
+
+/* ==================== EXTRACTION ==================== */
+function startExtraction(){
+  go('extracting');
+  const items=[...document.querySelectorAll('#xtSteps li')];
+  items.forEach(li=>li.className='');
+  items[0].className='doing';
+  [900,1750,2600,3400].forEach((t,i)=>timers.push(setTimeout(()=>{
+    items[i].className='done';
+    if(items[i+1]) items[i+1].className='doing';
+    else timers.push(setTimeout(()=>go('verify'),450));
+  },t)));
+}
+
+/* ==================== VERIFY ==================== */
+function renderVerify(){
+  const wrap=$('#verifyList');
+  wrap.innerHTML = meds.map(m=>{
+    const res = state.resolved[m.id];
+    const flagOpen = m.flag && !res;
+    const confirmed = state.confirmed[m.id];
+    const strength = m.id==='m2' ? (res ? res : null) : m.strength;
+    const duration = m.id==='m3' ? (res ? res+' days · ends '+endDate(res) : null) : m.duration;
+
+    if(confirmed) return `
+      <div class="card med-card confirmed">
+        <div class="med-confirmed-bar">
+          <span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${esc(m.name)}${strength?' · '+esc(strength):''}</span>
+          <button onclick="unconfirm('${m.id}')">Edit</button>
+        </div>
+      </div>`;
+
+    return `
+    <div class="card med-card">
+      <div class="med-head">
+        <div class="med-name">${esc(m.name)}<small>${strength?esc(strength):'<span class="unset">strength — see below</span>'}</small></div>
+        ${flagOpen?'<span class="tag tag-flag">⚠ Re-check</span>':'<span class="tag tag-ok">✓ Matched drug list</span>'}
+      </div>
+      <div class="med-chip"><span class="chip-label">From your paper</span><span class="ink-chip sm">${esc(m.ink)}</span></div>
+      <div class="med-grid">
+        <div class="med-row">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <div><span class="lbl">Schedule</span>${esc(m.schedule)}</div>
+        </div>
+        <div class="med-row">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v7a2 2 0 0 0 2 2v9M6 3v9M15 3c-1.5 1-2 3-2 5s.5 4 2 5v6"/></svg>
+          <div><span class="lbl">Food</span>${esc(m.food)}</div>
+        </div>
+        <div class="med-row">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <div><span class="lbl">Duration</span>${duration?esc(duration):'<span class="unset">days — see below</span>'}</div>
+        </div>
+      </div>
+      ${m.prn?'<div class="prn-note">No reminders for this one — your prescription says “when needed”. You can log a dose from Today whenever you take it.</div>':''}
+      ${flagOpen?`
+      <div class="flagbox">
+        <h5><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>${esc(m.flag.title)}</h5>
+        <p>${esc(m.flag.body)}</p>
+        <div class="flag-input">
+          <input id="in-${m.id}" ${m.flag.kind==='duration'?'inputmode="numeric" pattern="[0-9]*"':''} placeholder="${esc(m.flag.placeholder)}" oninput="flagTyping('${m.id}')">
+          <button id="save-${m.id}" disabled onclick="saveFlag('${m.id}')">Save</button>
+        </div>
+        <button class="ask-doc" onclick="shareSheet('flag','${m.id}')">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.9-.9L3 20l1-4.9a8.4 8.4 0 1 1 17-3.6z"/></svg>
+          Can’t read it either? Ask your doctor
+        </button>
+      </div>`:''}
+      <div class="med-actions">
+        <button class="round-btn" onclick="speak(meds.find(x=>x.id==='${m.id}').aloud)" title="Read aloud" aria-label="Read this medicine aloud">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg>
+        </button>
+        ${flagOpen
+          ? '<button class="btn-confirm" disabled>Resolve the re-check first</button>'
+          : `<button class="btn-confirm" onclick="confirmMed('${m.id}')"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Matches my paper</button>`}
+      </div>
+    </div>`;
+  }).join('') + `<button class="add-med"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add a medicine we missed</button>`;
+  renderVerifyFoot();
+}
+function endDate(days){ const d=new Date(2026,6,11); d.setDate(d.getDate()+Number(days)-1);
+  return d.toLocaleDateString('en-GB',{weekday:'short'})+', '+d.getDate()+' '+d.toLocaleDateString('en-GB',{month:'short'}); }
+function flagTyping(id){
+  const v=$('#in-'+id).value.trim();
+  const ok = id==='m3' ? (/^\d{1,2}$/.test(v) && +v>=1 && +v<=60) : v.length>=2;
+  $('#save-'+id).disabled=!ok;
+}
+function saveFlag(id){ state.resolved[id]=$('#in-'+id).value.trim(); renderVerify(); }
+function confirmMed(id){ state.confirmed[id]=true; renderVerify(); }
+function unconfirm(id){ delete state.confirmed[id]; renderVerify(); }
+function renderVerifyFoot(){
+  const n=Object.keys(state.confirmed).length, all=n===meds.length;
+  $('#vfBar').style.width=(n/meds.length*100)+'%';
+  $('#vfCount').textContent=n+' of '+meds.length+' confirmed';
+  const b=$('#btnVerify'); b.disabled=!all;
+  b.textContent = all ? 'Continue — set meal times' : 'Confirm each medicine to continue';
+}
+
+/* ==================== MEALS ==================== */
+function renderMeals(){
+  $('#mealList').innerHTML = slots.map(s=>`
+    <div class="card meal-row">
+      <div class="meal-ic">${s.emoji}</div>
+      <div class="meal-txt"><h4>${s.label}</h4><p>${s.hint}</p></div>
+      <button class="step-btn" onclick="meal('${s.key}',-15)" aria-label="Earlier">−</button>
+      <div class="meal-time" id="mt-${s.key}">${fmt(state.meals[s.key])}</div>
+      <button class="step-btn" onclick="meal('${s.key}',15)" aria-label="Later">+</button>
+    </div>`).join('') +
+    `<p class="meal-note">Today that means: Pantocid at <b id="exBefore">${fmt(state.meals.breakfast-30)}</b> (before breakfast), Augmentin & Ascoril at <b id="exAfter">${fmt(state.meals.breakfast+30)}</b> (after breakfast). You can change these anytime.</p>`;
+}
+function meal(k,d){ state.meals[k]=Math.max(300,Math.min(1410,state.meals[k]+d)); renderMeals(); }
+let signedIn=false;
+function startSave(){ if(signedIn) scheduleAll(); else go('signin'); }
+function permResult(allowed){
+  if(allowed){ scheduleAll(); }
+  else { go('home'); toast('Saved — but reminders are silenced. Turn on notifications in Settings.'); }
+}
+function scheduleAll(){ go('home'); toast('All set — 30 reminders scheduled · saved to your number'); }
+
+/* ==================== HOME ==================== */
+function doseTime(d){ return state.meals[d.slot]+d.offset; }
+function renderHome(){
+  const groups={};
+  doses.forEach(d=>{ const t=doseTime(d); (groups[t]=groups[t]||[]).push(d); });
+  const times=Object.keys(groups).map(Number).sort((a,b)=>a-b);
+  const next = doses.filter(d=>state.doseStatus[d.id]==='pending').sort((a,b)=>doseTime(a)-doseTime(b))[0];
+  const taken = doses.filter(d=>state.doseStatus[d.id]==='taken').length;
+
+  const stateIcon = st => st==='taken'
+    ? '<span class="dose-state st-taken"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Taken</span>'
+    : st==='skip' ? '<span class="dose-state st-skip">✕ Skipped</span>'
+    : st==='snooze' ? '<span class="dose-state st-snooze">◷ Snoozed 30m</span>'
+    : '<span class="dose-state st-pending">Due</span>';
+
+  $('#homeBody').innerHTML =
+    (next?`<div class="next-card"><span class="eyebrow">Next dose · ${fmt(doseTime(next))}</span><h3>${esc(next.med)}</h3><p>${esc(next.sub)}</p></div>`:
+          `<div class="next-card"><span class="eyebrow">All done</span><h3>Nothing more today</h3><p>Next reminder tomorrow at ${fmt(state.meals.breakfast-30)}</p></div>`) +
+    times.map(t=>`
+      <div class="time-group">
+        <div class="time-head"><b>${fmt(t)}</b><span>${groups[t][0].offset<0?'before':'after'} ${groups[t][0].slot}</span></div>
+        ${groups[t].map(d=>`
+          <button class="dose" onclick="openSheet('${d.id}')">
+            <span class="dose-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="4" transform="rotate(-35 12 12)"/><path d="m8.5 8.5 7 7" transform="rotate(-35 12 12)"/></svg></span>
+            <span class="dose-txt"><b>${esc(d.med)}</b><span>${esc(d.sub)}</span></span>
+            ${stateIcon(state.doseStatus[d.id])}
+          </button>`).join('')}
+      </div>`).join('') +
+    `<div class="card adherence"><b>${taken} of ${doses.length} taken</b><div class="vf-bar" style="flex:1"><i style="width:${taken/doses.length*100}%"></i></div></div>`;
+}
+function openSheet(id){
+  const d=doses.find(x=>x.id===id);
+  const veil=document.createElement('div'); veil.className='sheet-veil';
+  veil.onclick=e=>{ if(e.target===veil) veil.remove(); };
+  veil.innerHTML=`<div class="sheet"><div class="sheet-grip"></div>
+    <h3>${esc(d.med)}</h3><p>${esc(d.sub)} · ${fmt(doseTime(d))}</p>
+    <div class="sheet-actions">
+      <button class="btn take" onclick="setDose('${id}','taken')"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Taken</button>
+      <button class="btn btn-ghost" onclick="setDose('${id}','snooze')">Snooze 30m</button>
+      <button class="btn btn-ghost skip" onclick="setDose('${id}','skip')">Skip</button>
+    </div></div>`;
+  $('#clip').appendChild(veil);
+}
+function setDose(id,st){
+  state.doseStatus[id]=st;
+  const v=$('.sheet-veil'); if(v) v.remove();
+  renderHome();
+  toast(st==='taken'?'Dose marked as taken':st==='snooze'?'Snoozed for 30 minutes':'Dose skipped');
+}
+function lockAction(a){
+  if(a==='snooze'){ go('home'); toast('Snoozed for 30 minutes'); }
+  else go('home');
+}
+
+/* ==================== SHARE (send to your doctor) ==================== */
+function shareSheet(kind, medId){
+  const med = medId ? meds.find(m=>m.id===medId) : null;
+  const attach = kind==='flag'
+    ? `<b>Photo of the unclear part</b> (“${esc(med.ink)}”) + your question: “Could you confirm the ${med.flag.kind} of ${esc(med.name)} on my prescription from today?”`
+    : `<b>Adherence report (PDF)</b> — your confirmed schedule and dose history, day 1–3. Nothing leaves your phone until you pick an app.`;
+  const veil=document.createElement('div'); veil.className='sheet-veil';
+  veil.onclick=e=>{ if(e.target===veil) veil.remove(); };
+  veil.innerHTML=`<div class="sheet"><div class="sheet-grip"></div>
+    <h3>Send to your doctor</h3>
+    <p>Goes directly from your phone — RxScan never sees or stores the message.</p>
+    <div class="share-attach">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0E6E5B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      <span>${attach}</span>
+    </div>
+    <button class="share-opt" onclick="shareDone('WhatsApp')"><i style="background:#25D366">✆</i>WhatsApp</button>
+    <button class="share-opt" onclick="shareDone('Messages')"><i style="background:#3478F6">✉</i>Messages</button>
+    <button class="share-opt" onclick="shareDone('Email')"><i style="background:#8E8E93">@</i>Email</button>
+  </div>`;
+  $('#clip').appendChild(veil);
+}
+function shareDone(app){ const v=$('.sheet-veil'); if(v) v.remove(); toast('Opened in '+app+' — attachment ready'); }
+
+/* ==================== PROGRESS ==================== */
+function renderCourses(){
+  $('#courseList').innerHTML = courses.map(c=>`
+    <div class="card course-med">
+      <h4>${esc(c.name)}</h4><p>${esc(c.sub)}</p>
+      <div class="dots">${c.days.map((d,i)=>`<i class="d-${d}">${d==='today'?'Day '+(i+1):d==='miss'?'1 missed':''}</i>`).join('')}</div>
+    </div>`).join('');
+}
+
+/* ==================== AUTH · phone + OTP ==================== */
+function onPhoneInput(){
+  const el=$('#phoneInput'); el.value=el.value.replace(/\D/g,'').slice(0,10);
+  $('#btnSendCode').disabled = el.value.length!==10;
+}
+function sendCode(){
+  const p=$('#phoneInput').value;
+  $('#sentNum').textContent='+91 '+p.slice(0,5)+' '+p.slice(5);
+  resetOtp(); go('otp');
+}
+const otpBoxes=()=>[...document.querySelectorAll('#otpRow input')];
+function otpCode(){ return otpBoxes().map(b=>b.value).join(''); }
+function resetOtp(){ otpBoxes().forEach(b=>{b.value='';b.classList.remove('filled','err')}); $('#btnVerifyOtp').disabled=true; $('#otpErr').textContent=''; }
+function onOtpInput(i){
+  const boxes=otpBoxes(), b=boxes[i];
+  b.value=b.value.replace(/\D/g,'').slice(0,1);
+  $('#otpErr').textContent=''; boxes.forEach(x=>x.classList.remove('err'));
+  b.classList.toggle('filled', b.value!=='');
+  if(b.value && i<5) boxes[i+1].focus();
+  $('#btnVerifyOtp').disabled = otpCode().length!==6;
+  if(otpCode().length===6) $('#btnVerifyOtp').focus();
+}
+function onOtpKey(e,i){
+  const boxes=otpBoxes();
+  if(e.key==='Backspace' && !boxes[i].value && i>0){ boxes[i-1].focus(); boxes[i-1].value=''; boxes[i-1].classList.remove('filled'); $('#btnVerifyOtp').disabled=true; }
+  if(e.key==='Enter' && !$('#btnVerifyOtp').disabled) verifyOtp();
+}
+function onOtpPaste(e){
+  e.preventDefault();
+  const d=(e.clipboardData.getData('text')||'').replace(/\D/g,'').slice(0,6).split('');
+  const boxes=otpBoxes(); boxes.forEach((b,k)=>{ b.value=d[k]||''; b.classList.toggle('filled',!!d[k]); });
+  (boxes[d.length]||boxes[5]).focus();
+  $('#btnVerifyOtp').disabled = d.length!==6;
+}
+function verifyOtp(){
+  if(otpCode()==='000000'){ otpBoxes().forEach(b=>b.classList.add('err')); $('#otpErr').textContent="That code didn't match. Check your messages and try again."; return; }
+  signedIn=true; go('notifperm');
+}
+let otpTimer=null;
+function startOtpTimer(){
+  let s=30; const t=$('#otpTimer'), wrap=$('#otpWait'), btn=$('#otpResend');
+  wrap.style.display='inline'; btn.style.display='none';
+  clearInterval(otpTimer);
+  otpTimer=setInterval(()=>{ s--; t.textContent='0:'+String(s).padStart(2,'0');
+    if(s<=0){ clearInterval(otpTimer); wrap.style.display='none'; btn.style.display='inline'; } },1000);
+}
+function resendOtp(){ resetOtp(); startOtpTimer(); otpBoxes()[0].focus(); toast('New code sent to '+$('#sentNum').textContent); }
+function initAuth(){
+  const p=$('#phoneInput');
+  if(p) p.addEventListener('keydown', e=>{ if(e.key==='Enter' && !$('#btnSendCode').disabled) sendCode(); });
+}
+
+/* ==================== INIT ==================== */
+renderConsent();
+initAuth();
+go('welcome');
+</script>
+</body>
+</html>

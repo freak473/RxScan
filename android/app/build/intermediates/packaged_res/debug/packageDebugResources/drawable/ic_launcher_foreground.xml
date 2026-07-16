@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Capsule / pill mark, centered in the adaptive-icon safe zone. -->
+    <path
+        android:fillColor="#FBF8F1"
+        android:pathData="M28,54 m0,-8 a8,8 0 0 1 8,-8 h36 a8,8 0 0 1 8,8 v16 a8,8 0 0 1 -8,8 h-36 a8,8 0 0 1 -8,-8 z" />
+    <!-- Pill seam -->
+    <path
+        android:fillColor="#0E6E5B"
+        android:pathData="M53,46 h2 v16 h-2 z" />
+</vector>

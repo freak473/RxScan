@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/usr/libexec/java_home -V)",
+      "Read(//Users/ankitjain/.sdkman/candidates/**)",
+      "Read(//opt/homebrew/**)"
+    ]
+  }
+}
