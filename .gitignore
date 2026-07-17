@@ -1,0 +1,52 @@
+# ===== OS =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ===== IDE =====
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# ===== Gradle / Android build outputs =====
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.apk
+*.aab
+*.ap_
+*.aar
+*.dex
+release/
+
+# ===== Signing / secrets (never commit) =====
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+*.env
+.env
+.env.*
+
+# ===== Kotlin / Java =====
+.kotlin/
+*.class
+*.log
+*.hprof
+hs_err_pid*
+
+# ===== Backend (Spring Boot — later phase) =====
+backend/target/
+
+# ===== Claude Code (local, per-machine overrides) =====
+.claude/settings.local.json
