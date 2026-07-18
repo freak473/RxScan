@@ -1,6 +1,5 @@
 package com.rxscan.app.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -56,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.rxscan.app.data.FlagKind
 import com.rxscan.app.data.Medication
 import com.rxscan.app.data.MockData
+import com.rxscan.app.share.DoctorShare
 import com.rxscan.app.ui.components.InkChip
 import com.rxscan.app.ui.components.PaperCard
 import com.rxscan.app.ui.components.PrimaryButton
@@ -82,11 +82,14 @@ import java.util.Locale
  * paper says, or shares the question with their doctor (device-to-doctor).
  *
  * Editing model (PRD §6 "editable cards"):
- *  - Name/strength are user-editable on every unconfirmed card (pencil → dialog,
- *    prefilled with the currently displayed reading — the user corrects it).
- *  - A flagged field keeps its re-check box visible until the card is confirmed,
- *    so a typed value can be revised and Ask-your-doctor stays available.
- *  - The input is seeded only with the USER's own previous entry, never a
+ *  - EVERY field is user-editable on every unconfirmed card (pencil → dialog,
+ *    prefilled with the currently displayed reading — the user corrects it),
+ *    because even a high-confidence reading can be wrong.
+ *  - A flagged field keeps its re-check box visible until the card is confirmed;
+ *    flagged fields are owned by the flag box, not the dialog.
+ *  - "Message your doctor" is on every card (not just flagged ones) and attaches
+ *    the prescription photo from local storage (device-to-doctor).
+ *  - The flag input is seeded only with the USER's own previous entry, never a
  *    system value (CDSCO: flag, don't correct).
  */
 @Composable
@@ -96,6 +99,9 @@ fun VerifyScreen(onAllConfirmed: () -> Unit) {
     var resolved by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var nameEdits by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var strengthEdits by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
+    var scheduleEdits by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
+    var foodEdits by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
+    var durationEdits by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
 
     val allConfirmed = confirmed.size == meds.size
 
@@ -159,11 +165,17 @@ fun VerifyScreen(onAllConfirmed: () -> Unit) {
                         med = med,
                         displayName = displayName,
                         displayStrength = displayStrength,
+                        displaySchedule = scheduleEdits[med.id] ?: med.schedule,
+                        displayFood = foodEdits[med.id] ?: med.food,
+                        displayDurationText = displayDuration(med, resolved[med.id], durationEdits[med.id]),
                         resolvedValue = resolved[med.id],
                         onResolve = { resolved = resolved + (med.id to it) },
-                        onMetaSave = { newName, newStrength ->
-                            nameEdits = nameEdits + (med.id to newName)
-                            if (newStrength != null) strengthEdits = strengthEdits + (med.id to newStrength)
+                        onMetaSave = { edit ->
+                            nameEdits = nameEdits + (med.id to edit.name)
+                            if (edit.strength != null) strengthEdits = strengthEdits + (med.id to edit.strength)
+                            scheduleEdits = scheduleEdits + (med.id to edit.schedule)
+                            foodEdits = foodEdits + (med.id to edit.food)
+                            if (edit.duration != null) durationEdits = durationEdits + (med.id to edit.duration)
                         },
                         onConfirm = { confirmed = confirmed + med.id },
                     )
@@ -237,23 +249,36 @@ private fun ConfirmedBar(name: String, strength: String?, onEdit: () -> Unit) {
     }
 }
 
+/** One dialog edit: every field the user corrected. Flag-owned fields come back null. */
+private data class MedEdit(
+    val name: String,
+    val strength: String?,
+    val schedule: String,
+    val food: String,
+    val duration: String?,
+)
+
 @Composable
 private fun MedCard(
     med: Medication,
     displayName: String,
     displayStrength: String?,
+    displaySchedule: String,
+    displayFood: String,
+    displayDurationText: String?,
     resolvedValue: String?,
     onResolve: (String) -> Unit,
-    onMetaSave: (name: String, strength: String?) -> Unit,
+    onMetaSave: (MedEdit) -> Unit,
     onConfirm: () -> Unit,
 ) {
     val context = LocalContext.current
     val needsResolve = med.flag != null && resolvedValue == null
-    val durationText = displayDuration(med, resolvedValue)
+    val durationText = displayDurationText
     var editing by remember { mutableStateOf(false) }
 
-    // Strength is dialog-editable unless it's governed by a strength re-check flag.
+    // A field governed by a re-check flag is owned by the flag box, not the dialog.
     val strengthEditableHere = med.flag?.kind != FlagKind.STRENGTH
+    val durationEditableHere = med.flag?.kind != FlagKind.DURATION
 
     PaperCard {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -295,9 +320,9 @@ private fun MedCard(
             }
 
             Spacer(Modifier.height(12.dp))
-            InfoRow(Icons.Outlined.Schedule, "Schedule", med.schedule, valueMissing = false)
+            InfoRow(Icons.Outlined.Schedule, "Schedule", displaySchedule, valueMissing = false)
             Spacer(Modifier.height(8.dp))
-            InfoRow(Icons.Outlined.Restaurant, "Food", med.food, valueMissing = false)
+            InfoRow(Icons.Outlined.Restaurant, "Food", displayFood, valueMissing = false)
             Spacer(Modifier.height(8.dp))
             InfoRow(
                 Icons.Outlined.CalendarMonth, "Duration",
@@ -329,16 +354,6 @@ private fun MedCard(
                     med = med,
                     resolvedValue = resolvedValue,
                     onSave = onResolve,
-                    onAskDoctor = {
-                        val q = "Hi doctor — checking my prescription from 11 Jul: could you confirm the " +
-                            (if (med.flag.kind == FlagKind.STRENGTH) "strength" else "number of days") +
-                            " for $displayName? RxScan couldn’t read it clearly."
-                        val send = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, q)
-                        }
-                        context.startActivity(Intent.createChooser(send, "Ask your doctor"))
-                    },
                 )
             }
 
@@ -389,6 +404,35 @@ private fun MedCard(
                     }
                 }
             }
+
+            Spacer(Modifier.height(10.dp))
+
+            // Always available — even a high-confidence reading can be wrong.
+            // Attaches the prescription photo from local storage (device-to-doctor).
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.5.dp, PaperLine, RoundedCornerShape(14.dp))
+                    .clickable {
+                        val question = if (med.flag != null) {
+                            "Hi doctor — checking my prescription from 11 Jul (photo attached): could you confirm the " +
+                                (if (med.flag.kind == FlagKind.STRENGTH) "strength" else "number of days") +
+                                " for $displayName? RxScan couldn’t read it clearly."
+                        } else {
+                            "Hi doctor — quick check on my prescription from 11 Jul (photo attached): " +
+                                "I read $displayName as “${med.ink}”. Did I get that right?"
+                        }
+                        DoctorShare.askDoctor(context, question)
+                    },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = Green, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Message your doctor — photo attached", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = Green)
+            }
         }
     }
 
@@ -397,9 +441,13 @@ private fun MedCard(
             name = displayName,
             strength = if (strengthEditableHere) displayStrength else null,
             strengthEditable = strengthEditableHere,
+            schedule = displaySchedule,
+            food = displayFood,
+            duration = if (durationEditableHere) durationText else null,
+            durationEditable = durationEditableHere,
             onDismiss = { editing = false },
-            onSave = { newName, newStrength ->
-                onMetaSave(newName, newStrength)
+            onSave = { edit ->
+                onMetaSave(edit)
                 editing = false
             },
         )
@@ -416,21 +464,28 @@ private fun EditMedDialog(
     name: String,
     strength: String?,
     strengthEditable: Boolean,
+    schedule: String,
+    food: String,
+    duration: String?,
+    durationEditable: Boolean,
     onDismiss: () -> Unit,
-    onSave: (name: String, strength: String?) -> Unit,
+    onSave: (MedEdit) -> Unit,
 ) {
     var nameText by remember { mutableStateOf(name) }
     var strengthText by remember { mutableStateOf(strength ?: "") }
-    val valid = nameText.trim().length >= 2
+    var scheduleText by remember { mutableStateOf(schedule) }
+    var foodText by remember { mutableStateOf(food) }
+    var durationText by remember { mutableStateOf(duration ?: "") }
+    val valid = nameText.trim().length >= 2 && scheduleText.trim().isNotEmpty()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = White,
         title = { Text("Edit what we read", fontFamily = DisplayFamily, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary) },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Correct it to exactly what your paper says.",
+                    "Correct anything to exactly what your paper says.",
                     fontSize = 13.sp, lineHeight = 18.sp, color = Muted,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -453,14 +508,59 @@ private fun EditMedDialog(
                 } else {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "The strength is being re-checked below — type it there.",
+                        "The strength is being re-checked on the card — type it there.",
+                        fontSize = 12.sp, color = Amber,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = scheduleText,
+                    onValueChange = { scheduleText = it },
+                    label = { Text("Schedule (e.g. Morning · Night)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = foodText,
+                    onValueChange = { foodText = it },
+                    label = { Text("Food (e.g. After food)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (durationEditable) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = durationText,
+                        onValueChange = { durationText = it },
+                        label = { Text("Duration (e.g. 5 days)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "The number of days is being re-checked on the card — type it there.",
                         fontSize = 12.sp, color = Amber,
                     )
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(nameText.trim(), if (strengthEditable) strengthText.trim().ifEmpty { null } else null) }, enabled = valid) {
+            TextButton(
+                onClick = {
+                    onSave(
+                        MedEdit(
+                            name = nameText.trim(),
+                            strength = if (strengthEditable) strengthText.trim().ifEmpty { null } else null,
+                            schedule = scheduleText.trim(),
+                            food = foodText.trim(),
+                            duration = if (durationEditable) durationText.trim().ifEmpty { null } else null,
+                        ),
+                    )
+                },
+                enabled = valid,
+            ) {
                 Text("Save", color = if (valid) Green else Faint, fontWeight = FontWeight.Bold)
             }
         },
@@ -477,7 +577,6 @@ private fun FlagBox(
     med: Medication,
     resolvedValue: String?,
     onSave: (String) -> Unit,
-    onAskDoctor: () -> Unit,
 ) {
     val flag = med.flag ?: return
     // Seeded ONLY with the user's own previous entry (never a system value).
@@ -559,16 +658,6 @@ private fun FlagBox(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        // Ask-your-doctor stays available until the card is confirmed.
-        Row(
-            modifier = Modifier.clickable(onClick = onAskDoctor).padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = Green, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(7.dp))
-            Text("Can’t read it either? Ask your doctor", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Green)
-        }
     }
 }
 
@@ -613,11 +702,11 @@ private fun displayStrength(med: Medication, resolvedValue: String?, strengthEdi
     else -> med.strength
 }
 
-private fun displayDuration(med: Medication, resolvedValue: String?): String? = when {
-    med.duration != null -> med.duration
-    med.flag?.kind == FlagKind.DURATION && resolvedValue != null ->
-        "$resolvedValue days · ends ${endDate(resolvedValue.toInt())}"
-    else -> null
+private fun displayDuration(med: Medication, resolvedValue: String?, durationEdit: String?): String? = when {
+    med.flag?.kind == FlagKind.DURATION ->
+        resolvedValue?.let { "$it days · ends ${endDate(it.toInt())}" } // flag box owns this field
+    durationEdit != null -> durationEdit
+    else -> med.duration
 }
 
 /** Design convention: day 1 = the scan day (11 Jul 2026 in the demo). */
