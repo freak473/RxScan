@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PaperCard
 import com.rxscan.app.ui.components.PrimaryButton
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.GreenTint
 import com.rxscan.app.ui.theme.Ink
 import com.rxscan.app.ui.theme.Muted
@@ -92,7 +93,7 @@ fun MealTimesScreen(onSave: () -> Unit) {
                 .padding(horizontal = 22.dp),
         ) {
             Spacer(Modifier.height(28.dp))
-            Text("When do you eat?", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+            Text("When do you eat?", fontFamily = DisplayFamily, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
             Spacer(Modifier.height(6.dp))
             Text(
                 buildAnnotatedString {
@@ -129,7 +130,7 @@ fun MealTimesScreen(onSave: () -> Unit) {
                         Stepper("−") { set(s.key, value(s.key) - 15) }
                         Text(
                             fmt(value(s.key)),
-                            fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Ink,
+                            fontFamily = DisplayFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Ink,
                             modifier = Modifier.width(74.dp),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )

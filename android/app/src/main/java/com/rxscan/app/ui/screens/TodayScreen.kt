@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PaperCard
 import com.rxscan.app.ui.theme.Amber
 import com.rxscan.app.ui.theme.AmberBg
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.Green950
@@ -106,7 +107,7 @@ fun TodayScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Saturday, 11 July", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Muted)
-                Text("Today", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                Text("Today", fontFamily = DisplayFamily, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
             }
             Icon(
                 Icons.Outlined.MonitorHeart,
@@ -143,12 +144,12 @@ fun TodayScreen(
                         color = Color(0xFF8FBBAC),
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text(next.med, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White)
+                    Text(next.med, fontFamily = DisplayFamily, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White)
                     Text(next.sub, fontSize = 13.sp, color = Color(0xFFA7C6BA))
                 } else {
                     Text("ALL DONE", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, color = Color(0xFF8FBBAC))
                     Spacer(Modifier.height(4.dp))
-                    Text("Nothing more today", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White)
+                    Text("Nothing more today", fontFamily = DisplayFamily, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White)
                     Text("Next reminder tomorrow at 7:30 AM", fontSize = 13.sp, color = Color(0xFFA7C6BA))
                 }
             }
@@ -160,7 +161,7 @@ fun TodayScreen(
                     modifier = Modifier.padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(time, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                    Text(time, fontFamily = DisplayFamily, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                     Spacer(Modifier.width(8.dp))
                     Text(whenLabel, fontSize = 12.5.sp, color = Faint)
                 }
@@ -224,7 +225,7 @@ fun TodayScreen(
             containerColor = White,
         ) {
             Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp)) {
-                Text(dose.med, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                Text(dose.med, fontFamily = DisplayFamily, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                 Text("${dose.sub} · ${dose.time}", fontSize = 13.5.sp, color = Muted)
                 Spacer(Modifier.height(16.dp))
                 Row(

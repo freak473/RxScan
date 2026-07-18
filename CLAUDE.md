@@ -45,10 +45,16 @@ displayed reading; formulary autocomplete comes with the backend). Flag boxes st
 disappears after saving a value. Flag input is seeded only with the USER's own prior entry —
 never a system value (CDSCO invariant intact).
 
+Custom fonts DONE (2026-07-18): Bricolage Grotesque / Hanken Grotesk (variable TTFs, weight-pinned
+via FontVariation) + Kalam Regular/Bold bundled in `res/font`, wired in `ui/theme/Type.kt`; heading
+Texts across all screens carry `DisplayFamily` explicitly (inline styles inherit body face otherwise).
+Verified on-emulator. Also fixed 3 AA contrast fails (Faint→Muted: verify disclaimer, flag placeholder,
+"FROM YOUR PAPER" label). PRODUCT.md + DESIGN.md now exist at repo root (impeccable init/document).
+
 Not yet done: real camera, real extraction call, real OTP/backend, real POST_NOTIFICATIONS +
-exact-alarm requests (mocked inline per design), alarm scheduling, Room cache, custom fonts
-(system fonts; swap point `ui/theme/Type.kt` — Bricolage/Hanken/Kalam), error states beyond OTP
-(honest-failure/offline), toasts on save/deny.
+exact-alarm requests (mocked inline per design), alarm scheduling, Room cache, error states beyond OTP
+(honest-failure/offline), toasts on save/deny. Watch: welcome-screen subcopy clips behind the CTA on
+the 320dp-wide light AVD (Kalam's tall metrics grew the rx card) — candidate for /impeccable adapt.
 
 ## Toolchain (this machine)
 - **Android build JDK**: Android Studio bundled JBR 21 (`/Applications/Android Studio.app/Contents/jbr/Contents/Home`).
@@ -57,6 +63,8 @@ exact-alarm requests (mocked inline per design), alarm scheduling, Room cache, c
   (system) — user was going to `sudo rm` it.
 - **Android SDK**: `~/Library/Android/sdk` (only platform `android-36`, build-tools `36.0.0` installed).
 - **Postgres 16**: installed via brew, running (`brew services`). For the backend phase.
+- **Node**: brew node 26.5.0 (2026-07-18), fully brew-linked; old 2019 node-pkg remnants removed.
+  npm global prefix is the Cellar keg, so `npm -g` bins land in `Cellar/node/*/bin` (prefer `npx`).
 - Docker Desktop: optional / user's call (redundant with native Postgres for v1).
 
 ### Build the app from CLI
@@ -87,6 +95,6 @@ Gradle 8.11.1 (wrapper) · AGP 8.7.3 · Kotlin 2.0.21 · Compose BOM 2024.12.01 
 `android.suppressUnsupportedCompileSdk=36` set because only the SDK-36 platform is installed.
 
 ## Next steps (candidates)
-1. Custom fonts (Bricolage / Hanken / Kalam) via downloadable Google Fonts or bundled TTFs.
-2. Remaining UI states: honest-failure (unreadable image), offline banner, PRN/SOS, minor-consent.
+1. Remaining UI states: honest-failure (unreadable image), offline banner, PRN/SOS, minor-consent.
+2. Welcome-screen small-screen clipping fix (see Watch above).
 3. Then wire real behavior, or pivot to Phase 0 eval harness (the actual accuracy risk) / Phase 1 backend.

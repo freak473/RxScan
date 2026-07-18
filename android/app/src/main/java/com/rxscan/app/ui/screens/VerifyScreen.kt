@@ -62,6 +62,7 @@ import com.rxscan.app.ui.components.PrimaryButton
 import com.rxscan.app.ui.theme.Amber
 import com.rxscan.app.ui.theme.AmberBg
 import com.rxscan.app.ui.theme.AmberLine
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenSoft
@@ -105,7 +106,7 @@ fun VerifyScreen(onAllConfirmed: () -> Unit) {
     ) {
         // Head with progress
         Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 8.dp)) {
-            Text("Check each medicine", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+            Text("Check each medicine", fontFamily = DisplayFamily, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Compare with your paper. Nothing is scheduled until you confirm all four.",
@@ -197,7 +198,7 @@ fun VerifyScreen(onAllConfirmed: () -> Unit) {
         ) {
             Text(
                 "Confirm against your paper. When in doubt, ask your doctor or pharmacist.",
-                fontSize = 12.sp, lineHeight = 17.sp, color = Faint,
+                fontSize = 12.sp, lineHeight = 17.sp, color = Muted,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
             )
             PrimaryButton(
@@ -261,7 +262,7 @@ private fun MedCard(
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(displayName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(displayName, fontFamily = DisplayFamily, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         Spacer(Modifier.width(8.dp))
                         Icon(
                             Icons.Outlined.Edit,
@@ -288,7 +289,7 @@ private fun MedCard(
 
             // From your paper
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("FROM YOUR PAPER", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, color = Faint)
+                Text("FROM YOUR PAPER", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, color = Muted)
                 Spacer(Modifier.width(8.dp))
                 InkChip(med.ink)
             }
@@ -425,7 +426,7 @@ private fun EditMedDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = White,
-        title = { Text("Edit what we read", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        title = { Text("Edit what we read", fontFamily = DisplayFamily, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary) },
         text = {
             Column {
                 Text(
@@ -526,7 +527,7 @@ private fun FlagBox(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (typed.isEmpty()) {
-                    Text(flag.placeholder, fontSize = 13.5.sp, color = Faint)
+                    Text(flag.placeholder, fontSize = 13.5.sp, color = Muted)
                 }
             }
             Spacer(Modifier.width(8.dp))

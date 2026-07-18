@@ -36,6 +36,7 @@ import com.rxscan.app.ui.components.PrimaryButton
 import com.rxscan.app.ui.theme.AmberBg
 import com.rxscan.app.ui.theme.AmberLine
 import com.rxscan.app.ui.theme.Amber
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenSoft
 import com.rxscan.app.ui.theme.Muted
@@ -71,7 +72,7 @@ fun ConsentScreen(onContinue: () -> Unit) {
                 .padding(horizontal = 22.dp),
         ) {
             Spacer(Modifier.height(30.dp))
-            Text("Before we start", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+            Text("Before we start", fontFamily = DisplayFamily, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
             Spacer(Modifier.height(4.dp))
             Text("Two choices. You stay in control of both.", fontSize = 14.5.sp, color = Muted)
 

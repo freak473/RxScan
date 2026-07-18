@@ -1,14 +1,30 @@
 [
     {
-        "merged": "com.rxscan.app-debug-53:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
-        "source": "com.rxscan.app-main-55:/mipmap-anydpi-v26/ic_launcher_round.xml"
+        "merged": "/Users/ankitjain/.gradle/daemon/8.11.1/com.rxscan.app-debug-53:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "/Users/ankitjain/.gradle/daemon/8.11.1/com.rxscan.app-main-55:/mipmap-anydpi-v26/ic_launcher_round.xml"
     },
     {
-        "merged": "com.rxscan.app-debug-53:/mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "com.rxscan.app-main-55:/mipmap-anydpi-v26/ic_launcher.xml"
+        "merged": "/Users/ankitjain/.gradle/daemon/8.11.1/com.rxscan.app-debug-53:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "/Users/ankitjain/.gradle/daemon/8.11.1/com.rxscan.app-main-55:/mipmap-anydpi-v26/ic_launcher.xml"
     },
     {
-        "merged": "com.rxscan.app-debug-53:/drawable_ic_launcher_foreground.xml.flat",
-        "source": "com.rxscan.app-main-55:/drawable/ic_launcher_foreground.xml"
+        "merged": "com.rxscan.app-debug-53:/font_kalam_bold.ttf.flat",
+        "source": "com.rxscan.app-main-55:/font/kalam_bold.ttf"
+    },
+    {
+        "merged": "com.rxscan.app-debug-53:/font_kalam_regular.ttf.flat",
+        "source": "com.rxscan.app-main-55:/font/kalam_regular.ttf"
+    },
+    {
+        "merged": "com.rxscan.app-debug-53:/font_bricolage_grotesque.ttf.flat",
+        "source": "com.rxscan.app-main-55:/font/bricolage_grotesque.ttf"
+    },
+    {
+        "merged": "com.rxscan.app-debug-53:/font_hanken_grotesk.ttf.flat",
+        "source": "com.rxscan.app-main-55:/font/hanken_grotesk.ttf"
+    },
+    {
+        "merged": "/Users/ankitjain/.gradle/daemon/8.11.1/com.rxscan.app-debug-53:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "/Users/ankitjain/.gradle/daemon/8.11.1/com.rxscan.app-main-55:/drawable/ic_launcher_foreground.xml"
     }
 ]
