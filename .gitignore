@@ -53,3 +53,5 @@ backend/target/
 
 .claude/skills/*
 android/app/build/*
+.claude/settings.json
+.impeccable/
