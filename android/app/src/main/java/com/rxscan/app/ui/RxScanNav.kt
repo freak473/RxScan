@@ -44,6 +44,8 @@ fun RxScanNav() {
     val nav = rememberNavController()
     // Phone number hoisted here so signin → otp share it (UI pass; no backend).
     var phone by rememberSaveable { mutableStateOf("") }
+    // Notification choice hoisted so Today can show the persistent silenced banner (PRD §6.4).
+    var notifAllowed by rememberSaveable { mutableStateOf(true) }
 
     NavHost(navController = nav, startDestination = Routes.WELCOME) {
         composable(Routes.WELCOME) {
@@ -86,9 +88,10 @@ fun RxScanNav() {
             )
         }
         composable(Routes.NOTIF_PERM) {
-            NotifPermScreen(onResult = { _ ->
-                // Allow or deny: everything is still saved (denial shows a banner
-                // on Today once real permissions are wired).
+            NotifPermScreen(onResult = { allowed ->
+                // Allow or deny: everything is still saved; denial shows the
+                // persistent silenced banner on Today.
+                notifAllowed = allowed
                 nav.navigate(Routes.TODAY) {
                     popUpTo(Routes.WELCOME) { inclusive = true }
                 }
@@ -96,6 +99,7 @@ fun RxScanNav() {
         }
         composable(Routes.TODAY) {
             TodayScreen(
+                notifAllowed = notifAllowed,
                 onScanNew = { nav.navigate(Routes.CAPTURE) },
                 onPreviewReminder = { nav.navigate(Routes.LOCK) },
                 onOpenProgress = { nav.navigate(Routes.PROGRESS) },

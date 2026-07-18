@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PaperCard
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenSoft
@@ -90,7 +91,7 @@ fun ProgressScreen(onBack: () -> Unit) {
             )
             Spacer(Modifier.width(6.dp))
             Column {
-                Text("Your progress", fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                Text("Your progress", fontFamily = DisplayFamily, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                 Text("Day 3 of 5 · preview", fontSize = 14.sp, color = Muted)
             }
         }

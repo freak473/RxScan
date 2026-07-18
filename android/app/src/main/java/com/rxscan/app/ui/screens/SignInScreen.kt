@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PaperCard
 import com.rxscan.app.ui.components.PrimaryButton
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenSoft
@@ -76,7 +77,7 @@ fun SignInScreen(onBack: () -> Unit, onSendCode: (String) -> Unit) {
             )
             Spacer(Modifier.width(6.dp))
             Column {
-                Text("Save your reminders", fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                Text("Save your reminders", fontFamily = DisplayFamily, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "So they’re safe if you change phones. Your number is the only detail we keep — no name, no email.",

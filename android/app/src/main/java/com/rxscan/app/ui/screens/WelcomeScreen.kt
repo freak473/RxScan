@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PrimaryButton
 import com.rxscan.app.ui.theme.Amber
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenTint
@@ -79,7 +80,7 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
                 }
                 Spacer(Modifier.width(11.dp))
                 Column {
-                    Text("RxScan", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = TextPrimary, letterSpacing = (-0.2).sp)
+                    Text("RxScan", fontFamily = DisplayFamily, fontSize = 21.sp, fontWeight = FontWeight.Bold, color = TextPrimary, letterSpacing = (-0.2).sp)
                     Text(
                         "PRESCRIPTION REMINDERS",
                         fontSize = 9.sp,
@@ -147,6 +148,7 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text(
                 "Scan your prescription.\nWe’ll remind you.",
+                fontFamily = DisplayFamily,
                 fontSize = 24.sp,
                 lineHeight = 30.sp,
                 fontWeight = FontWeight.ExtraBold,

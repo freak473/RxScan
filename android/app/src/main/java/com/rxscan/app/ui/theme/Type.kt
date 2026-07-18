@@ -2,18 +2,37 @@ package com.rxscan.app.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.rxscan.app.R
 
-// NOTE (fonts): the design uses Bricolage Grotesque (display), Hanken Grotesk (UI),
-// and Kalam (the handwritten "ink" values). For this first UI pass we use system
-// families so the project builds with zero font/network setup. Swapping in the real
-// fonts is a one-file change here: define the three FontFamily values (downloadable
-// Google Fonts or bundled TTFs) and point Display/Ui/Ink at them.
-val DisplayFamily = FontFamily.SansSerif
-val UiFamily = FontFamily.SansSerif
-val InkFamily = FontFamily.Cursive // stand-in for Kalam until the real face is added
+// Bundled OFL faces (res/font): Bricolage Grotesque + Hanken Grotesk are variable
+// fonts, so each weight is the same file pinned to a wght instance; Kalam ships as
+// static Regular/Bold.
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private fun variableFont(res: Int, weight: FontWeight) =
+    Font(res, weight, variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)))
+
+val DisplayFamily = FontFamily(
+    variableFont(R.font.bricolage_grotesque, FontWeight.Bold),
+    variableFont(R.font.bricolage_grotesque, FontWeight.ExtraBold),
+)
+
+val UiFamily = FontFamily(
+    variableFont(R.font.hanken_grotesk, FontWeight.Normal),
+    variableFont(R.font.hanken_grotesk, FontWeight.Medium),
+    variableFont(R.font.hanken_grotesk, FontWeight.SemiBold),
+    variableFont(R.font.hanken_grotesk, FontWeight.Bold),
+    variableFont(R.font.hanken_grotesk, FontWeight.ExtraBold),
+)
+
+val InkFamily = FontFamily(
+    Font(R.font.kalam_regular, FontWeight.Normal),
+    Font(R.font.kalam_bold, FontWeight.Bold),
+)
 
 val Typography = Typography(
     displayLarge = TextStyle(

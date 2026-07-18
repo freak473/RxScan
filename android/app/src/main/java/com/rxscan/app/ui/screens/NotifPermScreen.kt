@@ -38,6 +38,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PaperCard
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenTint
@@ -64,7 +65,7 @@ fun NotifPermScreen(onResult: (allowed: Boolean) -> Unit) {
             .padding(horizontal = 22.dp),
     ) {
         Spacer(Modifier.height(30.dp))
-        Text("One permission for reminders", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+        Text("One permission for reminders", fontFamily = DisplayFamily, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
         Spacer(Modifier.height(4.dp))
         Text("Android will ask next. Without it, your reminders can’t ring.", fontSize = 14.sp, color = Muted)
 

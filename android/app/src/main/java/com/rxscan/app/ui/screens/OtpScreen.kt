@@ -42,6 +42,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PrimaryButton
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenSoft
@@ -94,7 +95,7 @@ fun OtpScreen(phone: String, onBack: () -> Unit, onVerified: () -> Unit) {
             )
             Spacer(Modifier.width(6.dp))
             Column {
-                Text("Enter the code", fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                Text("Enter the code", fontFamily = DisplayFamily, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     buildAnnotatedString {
@@ -154,7 +155,7 @@ fun OtpScreen(phone: String, onBack: () -> Unit, onVerified: () -> Unit) {
                                 ) {
                                     Text(
                                         ch?.toString() ?: "",
-                                        fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary,
+                                        fontFamily = DisplayFamily, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary,
                                     )
                                 }
                             }

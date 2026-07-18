@@ -1,5 +1,7 @@
 package com.rxscan.app.ui.screens
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -37,12 +40,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PaperCard
 import com.rxscan.app.ui.theme.Amber
 import com.rxscan.app.ui.theme.AmberBg
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.Green950
@@ -78,10 +84,12 @@ private val doseGroups = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(
+    notifAllowed: Boolean,
     onScanNew: () -> Unit,
     onPreviewReminder: () -> Unit,
     onOpenProgress: () -> Unit,
 ) {
+    val context = LocalContext.current
     val status = remember {
         mutableStateMapOf(
             "d1" to "taken", "d2" to "taken", "d3" to "taken", "d4" to "taken",
@@ -106,7 +114,7 @@ fun TodayScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Saturday, 11 July", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Muted)
-                Text("Today", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                Text("Today", fontFamily = DisplayFamily, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
             }
             Icon(
                 Icons.Outlined.MonitorHeart,
@@ -128,6 +136,37 @@ fun TodayScreen(
         ) {
             Spacer(Modifier.height(12.dp))
 
+            // Persistent silenced banner (PRD §6.4): denial still saves and schedules,
+            // but reminders can't ring — deep-link to the app's notification settings.
+            if (!notifAllowed) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFF7E9E6))
+                        .border(1.dp, RxRed.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                            )
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.NotificationsOff, contentDescription = null, tint = RxRed, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("Reminders are silenced", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = RxRed)
+                        Text(
+                            "Your doses are saved. Tap to turn on notifications in Settings.",
+                            fontSize = 12.sp, lineHeight = 16.sp, color = RxRed,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
             // Next dose card
             Column(
                 modifier = Modifier
@@ -143,12 +182,12 @@ fun TodayScreen(
                         color = Color(0xFF8FBBAC),
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text(next.med, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White)
-                    Text(next.sub, fontSize = 13.sp, color = Color(0xFFA7C6BA))
+                    Text(next.med, fontFamily = DisplayFamily, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(next.sub, fontSize = 13.sp, color = Color(0xFFA7C6BA), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 } else {
                     Text("ALL DONE", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, color = Color(0xFF8FBBAC))
                     Spacer(Modifier.height(4.dp))
-                    Text("Nothing more today", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White)
+                    Text("Nothing more today", fontFamily = DisplayFamily, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = White)
                     Text("Next reminder tomorrow at 7:30 AM", fontSize = 13.sp, color = Color(0xFFA7C6BA))
                 }
             }
@@ -160,7 +199,7 @@ fun TodayScreen(
                     modifier = Modifier.padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(time, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                    Text(time, fontFamily = DisplayFamily, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                     Spacer(Modifier.width(8.dp))
                     Text(whenLabel, fontSize = 12.5.sp, color = Faint)
                 }
@@ -192,7 +231,7 @@ fun TodayScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(taken / allDoses.size.toFloat())
+                                .fillMaxWidth(if (allDoses.isEmpty()) 0f else taken / allDoses.size.toFloat())
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(Green),
@@ -224,7 +263,7 @@ fun TodayScreen(
             containerColor = White,
         ) {
             Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp)) {
-                Text(dose.med, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                Text(dose.med, fontFamily = DisplayFamily, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                 Text("${dose.sub} · ${dose.time}", fontSize = 13.5.sp, color = Muted)
                 Spacer(Modifier.height(16.dp))
                 Row(
@@ -296,8 +335,8 @@ private fun DoseRow(dose: Dose, status: String, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(dose.med, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(dose.sub, fontSize = 12.sp, color = Muted)
+            Text(dose.med, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(dose.sub, fontSize = 12.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         StatusChip(status)
     }

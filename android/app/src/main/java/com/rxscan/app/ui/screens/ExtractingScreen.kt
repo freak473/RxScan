@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.theme.ChipPaper
+import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenSoft
@@ -101,7 +102,7 @@ fun ExtractingScreen(onDone: () -> Unit) {
         }
 
         Spacer(Modifier.height(26.dp))
-        Text("Reading your prescription…", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+        Text("Reading your prescription…", fontFamily = DisplayFamily, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
         Spacer(Modifier.height(4.dp))
         Text("Usually takes a few seconds.", fontSize = 14.sp, color = Muted)
         Spacer(Modifier.height(24.dp))

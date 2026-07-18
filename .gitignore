@@ -50,3 +50,8 @@ backend/target/
 
 # ===== Claude Code (local, per-machine overrides) =====
 .claude/settings.local.json
+
+.claude/skills/*
+android/app/build/*
+.claude/settings.json
+.impeccable/
