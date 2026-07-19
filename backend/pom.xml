@@ -28,7 +28,24 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- docker-java (bundled by Testcontainers) defaults to Docker API 1.32, which
+		     Docker Engine 25+ rejects (minimum 1.40). Pin a modern, in-range version for the
+		     Testcontainers-backed integration tests. Override with -Ddocker.api.version=… if a
+		     given daemon needs a different value. -->
+		<docker.api.version>1.44</docker.api.version>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>1.21.3</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -82,6 +99,23 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<!-- Real Postgres for @SpringBootTest: the app's DDL is Postgres-only (pg_trgm,
+			     GIN, IDENTITY), so the context test cannot use an embedded H2 substitute. -->
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -89,6 +123,16 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<!-- Force docker-java to speak a Docker API version the daemon accepts. -->
+						<api.version>${docker.api.version}</api.version>
+					</systemPropertyVariables>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
