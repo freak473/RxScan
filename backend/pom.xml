@@ -57,6 +57,12 @@
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
+			<!-- RFC-4180 CSV parsing for the formulary bulk loader (quoted comma-bearing fields) -->
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-csv</artifactId>
+			<version>1.12.0</version>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator-test</artifactId>
 			<scope>test</scope>

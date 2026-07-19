@@ -67,16 +67,26 @@ CREATE TABLE correction (
 CREATE INDEX idx_correction_token ON correction (retention_token);
 
 -- formulary reference catalog (~200K, static) -------------------------------
+-- Matching aid only: confirms a brand exists as printed and raises a field's
+-- confidence during extraction. NON-ADVISORY — no ingredients, indications, or
+-- substitutions live here (docs/superpowers/specs/2026-07-19-formulary-sku-schema-design.md).
 CREATE TABLE formulary_sku (
-    formulary_id  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    brand_name    TEXT NOT NULL,
-    generic       TEXT,
-    strength      TEXT,
-    form          TEXT,
-    search_terms  TEXT                              -- concatenated haystack for fuzzy match
+    formulary_id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    brand_name       TEXT        NOT NULL,          -- as printed: 'Allegra 120mg Tablet'
+    manufacturer     TEXT        NOT NULL,          -- 'Sanofi India Ltd'
+    strength         TEXT,                          -- parsed from brand_name, NULL if none: '120mg'
+    form             TEXT,                          -- parsed from brand_name: 'Tablet' | 'Syrup' | ...
+    is_discontinued  BOOLEAN     NOT NULL DEFAULT FALSE,  -- = CSV Is_discontinued
+    name_normalized  TEXT        NOT NULL,          -- lowercased, depunctuated, space-collapsed match key
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_formulary_brand_trgm ON formulary_sku USING gin (brand_name gin_trgm_ops);
-CREATE INDEX idx_formulary_terms_trgm ON formulary_sku USING gin (search_terms gin_trgm_ops);
+-- fuzzy brand-name match (the whole point of the table)
+CREATE INDEX idx_formulary_name_trgm ON formulary_sku USING gin (name_normalized gin_trgm_ops);
+-- idempotent CSV load + dedup (e.g. CSV id 4 'Allegra 120mg' appears twice)
+CREATE UNIQUE INDEX uq_formulary_name_mfr ON formulary_sku (name_normalized, manufacturer);
+-- skip discontinued cheaply at match time
+CREATE INDEX idx_formulary_active ON formulary_sku (name_normalized) WHERE is_discontinued = FALSE;
 
 -- consent + provenance (append-only, audit-grade) ---------------------------
 CREATE TABLE consent_provenance (
