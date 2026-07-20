@@ -55,3 +55,4 @@ backend/target/
 android/app/build/*
 .claude/settings.json
 .impeccable/
+.run
