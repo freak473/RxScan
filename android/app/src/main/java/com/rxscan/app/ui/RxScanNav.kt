@@ -78,6 +78,12 @@ fun RxScanNav() {
                     phone = it
                     nav.navigate(Routes.OTP)
                 },
+                // Login is optional (user opted not to force it). Skip straight to
+                // notification setup without an account; nothing is synced server-side.
+                onSkip = {
+                    phone = ""
+                    nav.navigate(Routes.NOTIF_PERM)
+                },
             )
         }
         composable(Routes.OTP) {
