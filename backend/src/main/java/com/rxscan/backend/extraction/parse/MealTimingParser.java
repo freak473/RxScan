@@ -19,15 +19,23 @@ public final class MealTimingParser {
     private static final String EMPTY = "";
     private static final java.util.regex.Pattern NON_ALNUM = java.util.regex.Pattern.compile("[^a-z0-9]");
 
-    // Keyed by compact form (lowercased, non-alphanumerics stripped) so "before food" and
-    // "beforefood" both hit. No entry is ever inferred — only these explicit notes map.
+    // Recognised meal-note keys, in compact form (lowercased, non-alphanumerics stripped).
+    private static final String AC = "ac";
+    private static final String BEFORE_FOOD = "beforefood";
+    private static final String EMPTY_STOMACH = "emptystomach";
+    private static final String PC = "pc";
+    private static final String AFTER_FOOD = "afterfood";
+    private static final String WITH_FOOD = "withfood";
+
+    // Keyed by compact form so "before food" and "beforefood" both hit. No entry is ever
+    // inferred — only these explicit notes map.
     private static final Map<String, Meal> MEALS = Map.ofEntries(
-            Map.entry("ac", Meal.BEFORE),
-            Map.entry("beforefood", Meal.BEFORE),
-            Map.entry("emptystomach", Meal.BEFORE),
-            Map.entry("pc", Meal.AFTER),
-            Map.entry("afterfood", Meal.AFTER),
-            Map.entry("withfood", Meal.WITH));
+            Map.entry(AC, Meal.BEFORE),
+            Map.entry(BEFORE_FOOD, Meal.BEFORE),
+            Map.entry(EMPTY_STOMACH, Meal.BEFORE),
+            Map.entry(PC, Meal.AFTER),
+            Map.entry(AFTER_FOOD, Meal.AFTER),
+            Map.entry(WITH_FOOD, Meal.WITH));
 
     /**
      * @return the recognized {@link Meal}, or {@code null} when {@code meal} is null, blank, or

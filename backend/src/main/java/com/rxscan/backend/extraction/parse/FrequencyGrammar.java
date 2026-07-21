@@ -35,32 +35,58 @@ public final class FrequencyGrammar {
     private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
     private static final java.util.regex.Pattern NON_ALNUM = java.util.regex.Pattern.compile("[^a-z0-9]");
 
-    // Abbreviations / phrases, keyed by their compact form (lowercased, alphanumerics only).
+    // Recognised abbreviation / phrase keys, in compact form (lowercased, alphanumerics only).
+    private static final String OD = "od";
+    private static final String ONCE_DAILY = "oncedaily";
+    private static final String BD = "bd";
+    private static final String BID = "bid";
+    private static final String TWICE_DAILY = "twicedaily";
+    private static final String TDS = "tds";
+    private static final String TID = "tid";
+    private static final String THRICE_DAILY = "thricedaily";
+    private static final String QID = "qid";
+    private static final String QDS = "qds";
+    private static final String HS = "hs";
+    private static final String AT_BEDTIME = "atbedtime";
+    private static final String SOS = "sos";
+    private static final String PRN = "prn";
+    private static final String AS_NEEDED = "asneeded";
+    private static final String STAT = "stat";
+    private static final String IMMEDIATELY = "immediately";
+    private static final String WEEKLY = "weekly";
+    private static final String ONCE_A_WEEK = "onceaweek";
+    private static final String OW = "ow";
+    private static final String EOD = "eod";
+    private static final String ALTERNATE_DAY = "alternateday";
+    private static final String ALT_DAY = "altday";
+    private static final String EVERY_OTHER_DAY = "everyotherday";
+
+    // Abbreviations / phrases → schedule, keyed by their compact form.
     private static final Map<String, FrequencyResult> ABBREV = Map.ofEntries(
-            Map.entry("od", daily(1, 0, 0, 0)),
-            Map.entry("oncedaily", daily(1, 0, 0, 0)),
-            Map.entry("bd", daily(1, 0, 1, 0)),
-            Map.entry("bid", daily(1, 0, 1, 0)),
-            Map.entry("twicedaily", daily(1, 0, 1, 0)),
-            Map.entry("tds", daily(1, 1, 1, 0)),
-            Map.entry("tid", daily(1, 1, 1, 0)),
-            Map.entry("thricedaily", daily(1, 1, 1, 0)),
-            Map.entry("qid", daily(1, 1, 1, 1)),
-            Map.entry("qds", daily(1, 1, 1, 1)),
-            Map.entry("hs", daily(0, 0, 0, 1)),
-            Map.entry("atbedtime", daily(0, 0, 0, 1)),
-            Map.entry("sos", pattern(Pattern.PRN)),
-            Map.entry("prn", pattern(Pattern.PRN)),
-            Map.entry("asneeded", pattern(Pattern.PRN)),
-            Map.entry("stat", pattern(Pattern.STAT)),
-            Map.entry("immediately", pattern(Pattern.STAT)),
-            Map.entry("weekly", pattern(Pattern.WEEKLY)),
-            Map.entry("onceaweek", pattern(Pattern.WEEKLY)),
-            Map.entry("ow", pattern(Pattern.WEEKLY)),
-            Map.entry("eod", pattern(Pattern.ALTERNATE_DAY)),
-            Map.entry("alternateday", pattern(Pattern.ALTERNATE_DAY)),
-            Map.entry("altday", pattern(Pattern.ALTERNATE_DAY)),
-            Map.entry("everyotherday", pattern(Pattern.ALTERNATE_DAY)));
+            Map.entry(OD, daily(1, 0, 0, 0)),
+            Map.entry(ONCE_DAILY, daily(1, 0, 0, 0)),
+            Map.entry(BD, daily(1, 0, 1, 0)),
+            Map.entry(BID, daily(1, 0, 1, 0)),
+            Map.entry(TWICE_DAILY, daily(1, 0, 1, 0)),
+            Map.entry(TDS, daily(1, 1, 1, 0)),
+            Map.entry(TID, daily(1, 1, 1, 0)),
+            Map.entry(THRICE_DAILY, daily(1, 1, 1, 0)),
+            Map.entry(QID, daily(1, 1, 1, 1)),
+            Map.entry(QDS, daily(1, 1, 1, 1)),
+            Map.entry(HS, daily(0, 0, 0, 1)),
+            Map.entry(AT_BEDTIME, daily(0, 0, 0, 1)),
+            Map.entry(SOS, pattern(Pattern.PRN)),
+            Map.entry(PRN, pattern(Pattern.PRN)),
+            Map.entry(AS_NEEDED, pattern(Pattern.PRN)),
+            Map.entry(STAT, pattern(Pattern.STAT)),
+            Map.entry(IMMEDIATELY, pattern(Pattern.STAT)),
+            Map.entry(WEEKLY, pattern(Pattern.WEEKLY)),
+            Map.entry(ONCE_A_WEEK, pattern(Pattern.WEEKLY)),
+            Map.entry(OW, pattern(Pattern.WEEKLY)),
+            Map.entry(EOD, pattern(Pattern.ALTERNATE_DAY)),
+            Map.entry(ALTERNATE_DAY, pattern(Pattern.ALTERNATE_DAY)),
+            Map.entry(ALT_DAY, pattern(Pattern.ALTERNATE_DAY)),
+            Map.entry(EVERY_OTHER_DAY, pattern(Pattern.ALTERNATE_DAY)));
 
     public static FrequencyResult parse(String doseNotation) {
         if (doseNotation == null || doseNotation.isBlank()) {
