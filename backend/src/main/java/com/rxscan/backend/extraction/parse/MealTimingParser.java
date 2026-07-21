@@ -16,6 +16,9 @@ public final class MealTimingParser {
     private MealTimingParser() {
     }
 
+    private static final String EMPTY = "";
+    private static final java.util.regex.Pattern NON_ALNUM = java.util.regex.Pattern.compile("[^a-z0-9]");
+
     // Keyed by compact form (lowercased, non-alphanumerics stripped) so "before food" and
     // "beforefood" both hit. No entry is ever inferred — only these explicit notes map.
     private static final Map<String, Meal> MEALS = Map.ofEntries(
@@ -34,7 +37,7 @@ public final class MealTimingParser {
         if (meal == null || meal.isBlank()) {
             return null;
         }
-        String compact = meal.toLowerCase().replaceAll("[^a-z0-9]", "");
+        String compact = NON_ALNUM.matcher(meal.toLowerCase()).replaceAll(EMPTY);
         return MEALS.get(compact);
     }
 }

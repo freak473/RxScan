@@ -22,6 +22,9 @@ import static com.rxscan.backend.extraction.parse.ParserThresholds.CONF_MIN;
  */
 public final class MedicationParser {
 
+    private static final String EMPTY = "";
+    private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
+
     private final FormularyMatcher matcher;
 
     public MedicationParser(FormularyMatcher matcher) {
@@ -87,6 +90,6 @@ public final class MedicationParser {
 
     /** Strength equality for the cross-check: case- and space-insensitive ("625 mg" ≡ "625mg"). */
     private static String normStrength(String s) {
-        return s.toLowerCase().replaceAll("\\s+", "");
+        return WHITESPACE.matcher(s.toLowerCase()).replaceAll(EMPTY);
     }
 }

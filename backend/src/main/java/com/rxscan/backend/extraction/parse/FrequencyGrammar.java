@@ -16,11 +16,24 @@ public final class FrequencyGrammar {
     private FrequencyGrammar() {
     }
 
+    private static final String HYPHEN = "-";
+    private static final String EMPTY = "";
+
+    // Fraction glyphs and their decimal values (a half / quarter / three-quarter tablet).
+    private static final String HALF = "½";
+    private static final String QUARTER = "¼";
+    private static final String THREE_QUARTER = "¾";
+
     // A positional notation is number-or-fraction tokens joined by hyphens:
     // "1-0-1", "0.5-0-0.5", "½-0-½", "1-0-0-1".
-    private static final String NUM = "(?:\\d*\\.?\\d+|[½¼¾])";
+    private static final String NUM = "(?:\\d*\\.?\\d+|[" + HALF + QUARTER + THREE_QUARTER + "])";
     private static final java.util.regex.Pattern POSITIONAL =
-            java.util.regex.Pattern.compile(NUM + "(?:-" + NUM + ")+");
+            java.util.regex.Pattern.compile(NUM + "(?:" + HYPHEN + NUM + ")+");
+    // Unicode dash variants (hyphen/figure/en/em dash) normalised to an ASCII hyphen before split.
+    private static final java.util.regex.Pattern DASH_VARIANTS =
+            java.util.regex.Pattern.compile("[‐-―]");
+    private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
+    private static final java.util.regex.Pattern NON_ALNUM = java.util.regex.Pattern.compile("[^a-z0-9]");
 
     // Abbreviations / phrases, keyed by their compact form (lowercased, alphanumerics only).
     private static final Map<String, FrequencyResult> ABBREV = Map.ofEntries(
@@ -56,7 +69,8 @@ public final class FrequencyGrammar {
         String lower = doseNotation.trim().toLowerCase();
 
         // Positional first (numbers-and-hyphens). Normalise en/em dashes and drop inner spaces.
-        String positional = lower.replaceAll("[‐-―]", "-").replaceAll("\\s+", "");
+        String dashed = DASH_VARIANTS.matcher(lower).replaceAll(HYPHEN);
+        String positional = WHITESPACE.matcher(dashed).replaceAll(EMPTY);
         if (POSITIONAL.matcher(positional).matches()) {
             FrequencyResult r = parsePositional(positional);
             if (r != null) {
@@ -65,13 +79,13 @@ public final class FrequencyGrammar {
         }
 
         // Otherwise an abbreviation / phrase, matched on its compact form.
-        String compact = lower.replaceAll("[^a-z0-9]", "");
+        String compact = NON_ALNUM.matcher(lower).replaceAll(EMPTY);
         FrequencyResult abbrev = ABBREV.get(compact);
         return abbrev != null ? abbrev : FrequencyResult.unrecognized();
     }
 
     private static FrequencyResult parsePositional(String s) {
-        String[] parts = s.split("-");
+        String[] parts = s.split(HYPHEN);
         double[] v = new double[parts.length];
         for (int i = 0; i < parts.length; i++) {
             Double d = fraction(parts[i]);
@@ -91,9 +105,9 @@ public final class FrequencyGrammar {
 
     private static Double fraction(String token) {
         return switch (token) {
-            case "½" -> 0.5;   // ½
-            case "¼" -> 0.25;  // ¼
-            case "¾" -> 0.75;  // ¾
+            case HALF -> 0.5;
+            case QUARTER -> 0.25;
+            case THREE_QUARTER -> 0.75;
             default -> {
                 try {
                     yield Double.valueOf(token);

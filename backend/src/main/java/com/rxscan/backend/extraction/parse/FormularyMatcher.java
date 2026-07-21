@@ -19,6 +19,11 @@ public final class FormularyMatcher {
 
     // Trigram candidate filter (%) + similarity score over active SKUs only. Key is bound twice:
     // once for the `%` filter, once for the similarity() score. Top 5 by score, we take the best.
+    // Result column labels, referenced by the row mapper below (the SQL owns them literally).
+    private static final String COL_FORMULARY_ID = "formulary_id";
+    private static final String COL_STRENGTH = "strength";
+    private static final String COL_SCORE = "score";
+
     private static final String SQL = """
             SELECT formulary_id, brand_name, strength, similarity(name_normalized, ?::text) AS score
             FROM formulary_sku
@@ -48,9 +53,9 @@ public final class FormularyMatcher {
         }
 
         List<Candidate> rows = engineJdbc.query(SQL,
-                (rs, i) -> new Candidate(rs.getLong("formulary_id"),
-                        rs.getString("strength"),
-                        rs.getDouble("score")),
+                (rs, i) -> new Candidate(rs.getLong(COL_FORMULARY_ID),
+                        rs.getString(COL_STRENGTH),
+                        rs.getDouble(COL_SCORE)),
                 key, key);
 
         if (rows.isEmpty()) {
