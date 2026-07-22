@@ -2,11 +2,14 @@
 
 ### Scan a prescription → verified medication reminders
 
-**Version:** 0.2.2 (engineering handoff — requirements closed)
+**Version:** 0.2.3 (engineering handoff — requirements closed)
 **Pairs with:** `prescription-reminders-prd-v0_4_1.md` (product), `RxScan-v2-design-v3.html` (UX)
 **Scope:** v1 backend + Android client + partner-ready extraction API
-**Last updated:** 12 July 2026
+**Last updated:** 23 July 2026
 
+> **Changed in v0.2.3 (consumer API v1 slice — aligns with `docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md`):**
+> Consumer schema reworked: `user` → **`users`** with **BIGINT identity `user_id` (internal-only — never client-visible, per the sequential-id rule)** plus **`public_id` UUID** as the JWT `sub` and any client-facing id. New tables: **`user_consent`** (append-only; FE holds consents locally pre-login and uploads them in the OTP-verify call) and **`user_preference`** (one encrypted FE-owned blob per user — meal times, toggles; server never parses it). Every table in **both** DBs now carries `created_at`/`updated_at`, maintained by a `set_updated_at()` trigger. Contract: `otp/verify` carries the consent list; added `PUT /v1/me/consents`, `PUT/GET /v1/me/preferences`. Slice A ships **JWT-only (no refresh token)**; OTP delivery via provider strategy — stub `000000` default, `GupshupOtpSender` ready (SMS only, no WhatsApp OTP).
+>
 > **Changed in v0.2.2 (aligns with PRD v0.4.2):** Added the Android permission strategy — POST_NOTIFICATIONS (runtime, API 33+) requested with a primer after OTP at the save moment; SCHEDULE_EXACT_ALARM via `ACTION_REQUEST_SCHEDULE_EXACT_ALARM` Settings deep-link as skippable step two, with WorkManager-window fallback + in-app warning on decline; battery-exemption contextual, never at onboarding; denial-state banner on Today; notification channel "Dose reminders" (IMPORTANCE_HIGH) created at first schedule; behavior API-level gated (≤12 auto-grants).
 >
 > **Changed in v0.2.1 (aligns with PRD v0.4.1):** Q10 closed — account at save; pre-login scans device-metered; unauthenticated-verify state and OTP-at-save fallbacks specified. Cost section updated with the restored ₹1/scan planning figure.
@@ -100,9 +103,9 @@ preprocess (deskew, crop, enhance, strip letterhead band)
 - Treated as an unreliable dependency: timeouts, retries with backoff, circuit breaker, and a hard fallback to the honest-failure path ("couldn't read this — re-shoot").
 
 ### 2.6 Auth service (consumer plane — phone + OTP)
-- `POST /v1/auth/otp/request` → send OTP to the phone via an SMS provider (a Data Processor); rate-limited per phone + per IP.
-- `POST /v1/auth/otp/verify` → on match, mint a session (short-lived JWT + refresh); create the `user` on first verify.
-- Identity = `userId` (internal UUID). The **phone number is the only PII**, stored **encrypted + as a keyed-HMAC blind index** so login can look up by phone without a plaintext column at rest.
+- `POST /v1/auth/otp/request` → send OTP to the phone via an SMS provider (a Data Processor); rate-limited per phone + per IP *(rate limiting deferred past slice A)*. Delivery is a provider strategy: stub `000000` default until the Gupshup contract closes; SMS only, no WhatsApp OTP.
+- `POST /v1/auth/otp/verify` → on match, mint a session (JWT; **refresh tokens deferred past slice A** — a `401` routes the app back to signin); create the `users` row on first verify. The request also carries the **consent list** the FE held locally pre-login.
+- Identity = `user_id` (internal BIGINT identity, never client-visible) + `public_id` (UUID — the JWT `sub` and any client-facing id). The **phone number is the only PII**, stored **encrypted + as a keyed-HMAC blind index** so login can look up by phone without a plaintext column at rest.
 - No name, email, or address is ever collected.
 
 ### 2.7 Prescription store (consumer plane — encrypted, system of record)
@@ -179,12 +182,20 @@ Two auth domains. The **engine plane** authenticates by client key (`X-Client-Ke
 | Method | Path | Purpose | Notes |
 |---|---|---|---|
 | `POST` | `/v1/auth/otp/request` | Send OTP | `{phone}`; rate-limited per phone + IP; SMS via Data Processor |
-| `POST` | `/v1/auth/otp/verify` | Verify + session | `{phone, otp}` → JWT (+refresh); creates `user` on first verify |
+| `POST` | `/v1/auth/otp/verify` | Verify + session | `{phone, otp, consents:[{purpose, granted, granted_at}]}` → JWT; creates `users` row on first verify |
+| `PUT` | `/v1/me/consents` | Upload consents post-login | JWT; append-only rows (e.g. `notify` from the notif-perm screen) |
+| `PUT` | `/v1/me/preferences` | Upsert preferences blob | JWT; FE-owned opaque JSON (meal times, toggles); encrypted; one row per user |
+| `GET` | `/v1/me/preferences` | Fetch preferences | JWT; device rehydrate |
 | `POST` | `/v1/prescriptions` | Save confirmed record | JWT; server encrypts + stores under `userId` |
-| `GET` | `/v1/prescriptions?since=` | Sync pull | JWT; returns changes for the device cache |
+| `GET` | `/v1/prescriptions?since=` | Sync pull | JWT; `since` optional — absent ⇒ full pull for the device cache |
 | `PATCH` | `/v1/prescriptions/{id}` | Edit / adherence event | JWT; server is authoritative |
-| `DELETE` | `/v1/me` | Delete account + record | JWT; hard-delete encrypted record + user + phone ciphertext/blind-index |
-| `GET` | `/v1/me/export` | Export account data | JWT; decrypted portable bundle |
+| `DELETE` | `/v1/me` | Delete account + record | JWT; hard-delete encrypted record + user + phone ciphertext/blind-index *(post-slice-A)* |
+| `GET` | `/v1/me/export` | Export account data | JWT; decrypted portable bundle *(post-slice-A)* |
+
+Slice A (`docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md`) implements everything
+above except `DELETE /v1/me` and `GET /v1/me/export` — DPDP launch-blockers, not integration
+blockers. Prescription + preferences payloads are **FE-owned and server-opaque** (encrypted
+blobs); the JWT `sub` is `users.public_id`, never the sequential `user_id`.
 
 **Result schema** (per PRD §7, unchanged shape):
 ```json
@@ -245,16 +256,27 @@ Two logical databases. The **engine store** (below, first group) carries no user
 
 ### Consumer store (separate DB, encrypted, `userId`-keyed)
 
-**`user`** — the only PII, minimised
-`user_id (pk, UUID)` · `phone_enc` (ciphertext) · `phone_blind_idx` (keyed-HMAC, unique, indexed — login lookup) · `dek_wrapped` (per-user data key, wrapped by KMS master key) · `is_minor_verified` · `created_at`
+**`users`** — the only PII, minimised
+`user_id (pk, BIGINT identity — internal-only, never client-visible)` · `public_id (UUID, unique — JWT sub / anything client-facing)` · `phone_enc` (ciphertext) · `phone_blind_idx` (keyed-HMAC, unique, indexed — login lookup) · `dek_wrapped` (per-user data key, wrapped by KMS master key) · `is_minor_verified`
 → No name/email/address. Login looks up by `phone_blind_idx`; the plaintext phone exists only transiently in the OTP request.
 
+**`user_consent`** — append-only consent log
+`consent_id (pk)` · `user_id (fk, indexed)` · `purpose ∈ {process, notify, retain_optin}` · `granted` · `granted_at` (device-side grant time)
+→ Withdrawal = new row with `granted=false`, never an UPDATE. FE holds consents locally pre-login and uploads them at OTP verify; `created_at` is the server receipt.
+
+**`user_preference`** — encrypted FE-owned blob, exactly one row per user
+`user_id (pk, fk)` · `payload_enc` (meal times, toggles — server never parses it)
+→ Upserted after login and on every change; pulled on device rehydrate.
+
 **`prescription`** — the confirmed record, encrypted
-`rx_id (pk)` · `user_id (indexed)` · `payload_enc` (envelope-encrypted JSON: medicines, slots, meal timing, duration, course dates) · `updated_at` · `created_at`
+`rx_id (pk)` · `user_id (indexed)` · `payload_enc` (envelope-encrypted JSON: medicines, slots, meal timing, duration, course dates)
 → Every medical field lives inside `payload_enc`; nothing sensitive in cleartext columns. Decrypted in memory per request via the user's DEK.
 
 **`adherence_event`** — encrypted history
-`event_id (pk)` · `user_id (indexed)` · `rx_id` · `payload_enc` (slot time, state ∈ {taken, skipped, snoozed}) · `created_at`
+`event_id (pk)` · `user_id (indexed)` · `rx_id` · `payload_enc` (slot time, state ∈ {taken, skipped, snoozed})
+
+Every table in **both** DBs additionally carries `created_at` + `updated_at`, maintained by a
+`BEFORE UPDATE` trigger (`set_updated_at()`) — Postgres has no `ON UPDATE CURRENT_TIMESTAMP`.
 
 → Consumer-store access is **by `user_id`** (read/sync/delete/export). Device Room mirrors these as a disposable offline cache (`schedule`, `dose`, `adherence_event`, `meal_prefs`, `capture_queue`).
 
@@ -514,7 +536,7 @@ Mirrors the PRD's product open-Qs where they have an engineering dimension, plus
 8. **When to introduce Redis:** define the concrete metering-contention metric that trips the trigger in §6.9.
 9. ~~**Encryption model (PRD Q12):** envelope vs E2E?~~ **Resolved: envelope encryption (server-decryptable).** Recovers cleanly on a lost device (E2E cannot without escrow), and is legally sufficient — DPDP Rule 6 mandates encryption + key management, not zero-knowledge. Defensibility rests on the key controls in §7.1 (HSM master key, no standing decrypt access, audit logs), not on irreversibility.
 10. ~~**Account timing (PRD Q13):**~~ **Resolved: at save (PRD v0.4.1).** Scan/verify pre-login; phone-OTP prompted at the "Set my reminders" tap; on verify, the record persists and reminders schedule in the same action. Engineering consequences: pre-login extraction is metered per device (client key + Play Integrity device attestation), converting to the per-user meter after sign-in; the app must tolerate an unauthenticated verify state (extraction result held locally until session exists); OTP failure at save falls back to resend/missed-call verification, and the confirmed record is held in the Room queue so nothing is lost while the user retries.
-11. **OTP provider + abuse controls:** SMS Data Processor choice (DPDP terms), OTP rate-limiting/lockout, and defence against OTP-pumping / enumeration on the blind index.
+11. **OTP provider + abuse controls:** ~~SMS Data Processor choice~~ **vendor resolved: Gupshup, SMS only (no WhatsApp OTP)** — contract + DLT registration pending (see CHECKLIST); stub `000000` until then. Still open: OTP rate-limiting/lockout and defence against OTP-pumping / enumeration on the blind index.
 12. **Key rotation:** DEK/master-key rotation policy and re-wrap procedure; refresh-token rotation and session lifetime.
 
 ---

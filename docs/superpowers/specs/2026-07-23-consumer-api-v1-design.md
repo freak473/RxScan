@@ -1,4 +1,4 @@
-# Consumer API v1 — auth, consents, prescriptions (slice A)
+# Consumer API v1 — auth, consents, preferences, prescriptions (slice A)
 
 **Date:** 2026-07-23 · **Status:** approved design, pre-implementation
 **Sources:** tech design §4 (contract), §6.G/§6.H (stores); CLAUDE.md invariants; user decisions in-session.
@@ -6,8 +6,9 @@
 ## Goal
 
 Give the FE a real consumer plane to hit: phone-OTP login (stubbed OTP, Gupshup-ready),
-consent upload at login, prescription save/edit/sync. Design the FE store (Room + DataStore)
-and publish a contract doc the FE builds against.
+consent upload at login, user preferences (meal times) sync, prescription save/edit/sync.
+Everything the FE store holds must reach the BE after login. Design the FE store
+(Room + DataStore) and publish a contract doc the FE builds against.
 
 ## Non-goals (named follow-ups)
 
@@ -25,12 +26,17 @@ launch-blockers, not integration blockers), adherence API, alarm scheduling, Wha
 | 4 | `POST /v1/prescriptions` | Bearer | `{payload:<opaque JSON>}` → `201 {rx_id, updated_at}` |
 | 5 | `PATCH /v1/prescriptions/{rx_id}` | Bearer | `{payload}` → `200 {updated_at}` · `404` |
 | 6 | `GET /v1/prescriptions?since=<ISO8601>` | Bearer | `200 {prescriptions:[{rx_id, payload, created_at, updated_at}]}` — `since` optional; absent ⇒ full pull |
+| 7 | `PUT /v1/me/preferences` | Bearer | `{payload:<opaque JSON>}` → `204` (upsert; exactly one row per user) |
+| 8 | `GET /v1/me/preferences` | Bearer | `200 {payload, updated_at}` · `404` if never set |
 
 - **Server never parses `payload`.** It envelope-encrypts the FE's confirmed-meds JSON
   (AES-GCM with the per-user DEK) into `prescription.payload_enc` and round-trips it on
   sync. No medical data is server-interpretable.
 - Payload schema is **FE-owned**, documented in the contract doc:
   `{schema:1, meds:[{name, strength, slots, mealTiming, durationDays, prn}], confirmedAt}`.
+- Preferences payload likewise FE-owned + server-opaque: `{schema:1, mealTimes:{breakfast,lunch,dinner}, …}`
+  → encrypted into `user_preference.payload_enc` (new 1:1 table; keeps `users` a pure identity
+  row and gives preferences their own `updated_at` for sync).
 - Errors: uniform `{error:{code, message}}` — codes `invalid_phone`, `invalid_otp`,
   `unauthorized`, `not_found`, `payload_too_large` (cap 256 KB).
 - Consents are append-only rows in `user_consent` (withdrawal = new row, `granted=false`);
@@ -43,7 +49,10 @@ Flow: welcome → consent → capture → extract → verify → mealtimes → *
 - Everything before signin needs **no user auth**: consents sit in DataStore, `/extract` is
   engine-plane (no user identity), verify/mealtimes are local.
 - The **prescription save is deferred**: confirmed meds are held locally (Room,
-  `pendingSync=true`) and `POST /v1/prescriptions` fires right after OTP verify succeeds.
+  `pendingSync=true`) and `POST /v1/prescriptions` fires right after OTP verify succeeds —
+  along with `PUT /v1/me/preferences` (meal times set on the mealtimes screen, pre-login).
+  **Everything the FE store holds is on the server once login completes**; preferences also
+  re-push on every later change and pull on device rehydrate.
 - `notify` consent arrives after login (notifperm screen) via `PUT /v1/me/consents`;
   `process`/`retain_optin` piggyback on the verify call.
 - **Contract rule: any `401` ⇒ FE clears the token and routes to signin** (re-OTP; no
@@ -89,17 +98,18 @@ interface OtpSender { void send(String phone, String otp); }
 ```
 auth/         AuthController, OtpService, OtpSender{Stub,Gupshup}, JwtService,
               JwtInterceptor, CryptoService, UserRepository
-consent/      ConsentRepository
+consent/      ConsentController, ConsentRepository
+preference/   PreferenceController, PreferenceRepository
 prescription/ PrescriptionController, PrescriptionRepository
 ```
 
 ## FE bindings + store
 
-- `data/net/`: `AuthApi`, `PrescriptionApi` beside `ExtractionApi`; shared OkHttp; auth
-  interceptor injects `Bearer` from DataStore.
-- **DataStore** (prefs): JWT, phone, pre-login consents (FE holds consents locally until
-  login, uploads them in verify — accepted risk: storage wipe pre-login loses nothing,
-  since the server holds no user data yet).
+- `data/net/`: `AuthApi`, `MeApi` (consents + preferences), `PrescriptionApi` beside
+  `ExtractionApi`; shared OkHttp; auth interceptor injects `Bearer` from DataStore.
+- **DataStore** (Jetpack Preferences): JWT, phone, meal times, pre-login consents (FE holds
+  consents + meal times locally until login, then uploads — accepted risk: storage wipe
+  pre-login loses nothing, since the server holds no user data yet).
 - **Room**: `PrescriptionEntity(localId PK, rxId nullable, payloadJson, pendingSync, updatedAt)`
   + DAO; disposable cache of the server record, rehydrated via `GET ?since=`. `rxId` is null
   and `pendingSync=true` until the post-login save assigns the server id. Deliberately
@@ -108,8 +118,8 @@ prescription/ PrescriptionController, PrescriptionRepository
 
 ## Contract doc deliverable
 
-`docs/api-contract-v1.md`: every endpoint with curl-able examples, error table, FE-owned
-payload schema, the existing `POST /extract` documented as-is, and CDSCO/DPDP invariants
+`docs/api-contract-v1.md`: every endpoint with curl-able examples, error table, both FE-owned
+payload schemas (meds + preferences), the existing `POST /extract` documented as-is, and CDSCO/DPDP invariants
 stated as contract rules (no `suggested_value` field exists in any schema; phone is the
 only PII; payload is opaque to the server).
 

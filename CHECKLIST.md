@@ -41,7 +41,7 @@ The rest is polish. A user can't actually *use* RxScan until these three land:
 - [x] Ask-your-doctor native share sheet; persistent "silenced" banner on Today (PRD §6.4)
 - [x] Custom fonts (Bricolage / Hanken / Kalam), 3 AA-contrast fixes
 
-**Docs** — PRD v0.4.2, tech design v0.2.2, v3 UI prototype, PRODUCT.md, DESIGN.md
+**Docs** — PRD v0.4.2, tech design v0.2.3, v3 UI prototype, PRODUCT.md, DESIGN.md
 
 ---
 

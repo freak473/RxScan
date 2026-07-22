@@ -1,5 +1,5 @@
 -- rxscan_engine V1 — engine plane. Keyed to token/client, NEVER a person.
--- docs/rxscan-tech-design-v0_2_2.md §5. No userId/phone may appear in this database.
+-- docs/rxscan-tech-design-v0_2_3.md §5. No userId/phone may appear in this database.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;      -- gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pg_trgm;       -- formulary fuzzy match
@@ -15,13 +15,16 @@ CREATE TABLE client_key (
     monthly_cap    INTEGER,                        -- NULL = uncapped
     status         TEXT NOT NULL DEFAULT 'active'
                      CHECK (status IN ('active', 'suspended', 'revoked')),
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE usage_meter (
     client_key_id  UUID NOT NULL REFERENCES client_key(client_key_id),
     window_start   TIMESTAMPTZ NOT NULL,           -- bucket start (e.g. truncated hour)
     count          BIGINT NOT NULL DEFAULT 0,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (client_key_id, window_start)
 );
 
@@ -35,6 +38,7 @@ CREATE TABLE extraction_job (
     result           JSONB,                         -- nested medications payload; purged on TTL
     retention_token  UUID,                          -- set only if promoted to retention
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at       TIMESTAMPTZ NOT NULL,
     UNIQUE (client_key_id, idempotency_key)         -- dedupe retried uploads
 );
@@ -51,7 +55,8 @@ CREATE TABLE retained_item (
     extracted_value  TEXT,
     corrected_value  TEXT,                          -- USER's correction only, never system-proposed
     confidence       REAL,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_retained_token ON retained_item (retention_token);
 
@@ -62,7 +67,8 @@ CREATE TABLE correction (
     field_type       TEXT NOT NULL,
     model_value      TEXT,
     user_value       TEXT NOT NULL,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_correction_token ON correction (retention_token);
 
@@ -95,9 +101,22 @@ CREATE TABLE consent_provenance (
     purpose          TEXT NOT NULL CHECK (purpose IN ('process','retain','backup')),
     granted          BOOLEAN NOT NULL,              -- captures denials too, not just grants
     source           TEXT NOT NULL,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_provenance_token ON consent_provenance (retention_token);
+
+-- updated_at maintenance ------------------------------------------------------
+CREATE FUNCTION set_updated_at() RETURNS trigger AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_client_key_updated         BEFORE UPDATE ON client_key         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_usage_meter_updated        BEFORE UPDATE ON usage_meter        FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_extraction_job_updated     BEFORE UPDATE ON extraction_job     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_retained_item_updated      BEFORE UPDATE ON retained_item      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_correction_updated         BEFORE UPDATE ON correction         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_formulary_sku_updated      BEFORE UPDATE ON formulary_sku      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_consent_provenance_updated BEFORE UPDATE ON consent_provenance FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 -- Immutability is policy-enforced (§6.F): once an app DB role exists, run
 --   REVOKE UPDATE, DELETE ON consent_provenance FROM rxscan_app;
 -- Token-scoped erasure is itself a logged INSERT, never an UPDATE/DELETE.

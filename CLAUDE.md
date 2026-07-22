@@ -6,7 +6,7 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
 
 ## Source of truth
 - `docs/prescription-reminders-prd-v0_4_2.md` — product PRD (requirements closed)
-- `docs/rxscan-tech-design-v0_2_2.md` — engineering design (two-plane architecture, DB choices)
+- `docs/rxscan-tech-design-v0_2_3.md` — engineering design (two-plane architecture, DB choices)
 - `docs/RxScan-v2-design-v3.html` — interactive UI prototype (the visual design system)
 
 ## Repo layout
@@ -41,11 +41,14 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
 
 ## Current status (last updated 2026-07-23)
 **Backend consumer plane:** schema reworked (`app_user`→`users`, BIGINT identity ids,
-`user_consent` table, `created_at`/`updated_at` + `set_updated_at()` trigger everywhere, both DBs
-re-provisioned). Consumer API v1 design approved →
+`user_consent` + `user_preference` tables, `created_at`/`updated_at` + `set_updated_at()` trigger
+everywhere, both DBs re-provisioned). Consumer API v1 design approved →
 `docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md` (OTP stub `000000` default,
 `GupshupOtpSender` config-gated — SMS only, no WhatsApp; JWT sub = `users.public_id`, opaque
-payload). Post-commit hook in `.claude/settings.local.json` enforces the CLAUDE.md-update rule.
+payload). **Implementation plan ready:** `docs/superpowers/plans/2026-07-23-consumer-api-v1-slice-a.md`
+(backend slice A; FE wiring is a follow-up plan). Tech design bumped to **v0.2.3**
+(`docs/rxscan-tech-design-v0_2_3.md`) — consumer schema/contract sections now match the spec.
+Post-commit hook in `.claude/settings.local.json` enforces the CLAUDE.md-update rule.
 
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
@@ -87,6 +90,8 @@ the 320dp-wide light AVD (Kalam's tall metrics grew the rx card) — candidate f
   (system) — user was going to `sudo rm` it.
 - **Android SDK**: `~/Library/Android/sdk` (only platform `android-36`, build-tools `36.0.0` installed).
 - **Postgres 16**: installed via brew, running (`brew services`). For the backend phase.
+- **Backend builds**: use system `mvn` (3.9.16) — `backend/mvnw` is broken on this machine (its
+  wget links a deleted brew dylib and the wrapper tries to re-download Maven).
 - **Node**: brew node 26.5.0 (2026-07-18), fully brew-linked; old 2019 node-pkg remnants removed.
   npm global prefix is the Cellar keg, so `npm -g` bins land in `Cellar/node/*/bin` (prefer `npx`).
 - Docker Desktop: optional / user's call (redundant with native Postgres for v1).

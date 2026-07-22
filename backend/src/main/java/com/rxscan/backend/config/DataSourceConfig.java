@@ -14,7 +14,7 @@ import javax.sql.DataSource;
 /**
  * Two datasources against one Postgres server, two databases.
  * The engine plane carries no user identity; the consumer plane is the only place a
- * userId/phone lives (docs/rxscan-tech-design-v0_2_2.md §5). Postgres cannot do
+ * userId/phone lives (docs/rxscan-tech-design-v0_2_3.md §5). Postgres cannot do
  * cross-database foreign keys, which enforces that firewall at the engine level.
  */
 @Configuration
