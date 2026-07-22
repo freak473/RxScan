@@ -29,7 +29,7 @@ import org.springframework.web.client.RestClient;
 public class ExtractionConfig {
 
     // Resolves rxscan.vision.api-key, falling back to the GEMINI_API_KEY env var, else empty.
-    private static final String API_KEY_PLACEHOLDER = "${rxscan.vision.api-key:${GEMINI_API_KEY:AQ.Ab8RN6Icx1Ce1IWC_5M3Lo1pxIL0027Q70eUXEnpVQwO04Onrg}}";
+    private static final String API_KEY_PLACEHOLDER = "${rxscan.vision.api-key:${GEMINI_API_KEY:}}";
     private static final String HAS_API_KEY_EXPRESSION =
             "T(org.springframework.util.StringUtils).hasText('" + API_KEY_PLACEHOLDER + "')";
     private static final String MODEL_PROPERTY = "${rxscan.vision.model}";
