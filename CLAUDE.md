@@ -22,6 +22,12 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
 - **Non-advisory copy**: "your prescription says…", never "you should take…". No inferred indications.
 - **Data minimisation**: phone is the only PII; prescription record encrypted server-side (later phases).
 
+## Backend testing — no live AI calls
+- **Never write automated tests that hit a real vision/AI API.** Free provider quota is limited and
+  scarce. Mock the provider instead (`MockRestServiceServer`, canned response bodies) and unit-test
+  the request shape, `parseResponse`, and error mapping. Real extraction accuracy is validated
+  **manually via the app** (capture → `POST /extract`), not in the test suite.
+
 ## Current status (last updated 2026-07-16)
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
