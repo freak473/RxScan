@@ -43,6 +43,9 @@ public class ExtractionController {
             "Unsupported image type; expected one of " + ALLOWED_CONTENT_TYPES;
     private static final String ERROR_TOO_LARGE = "image exceeds the 10MB limit";
     private static final String ERROR_VISION_UNAVAILABLE = "Vision model not configured";
+    private static final String ERROR_VISION_RATE_LIMITED =
+            "Vision model is busy right now — please try again shortly";
+    private static final String ERROR_VISION_UPSTREAM = "Vision model request failed";
     private static final String RESPONSE_KEY_MESSAGE = "message";
 
     private final ExtractionService extractionService;
@@ -80,5 +83,17 @@ public class ExtractionController {
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     public Map<String, String> handleVisionUnavailable(VisionUnavailableException e) {
         return Map.of(RESPONSE_KEY_MESSAGE, ERROR_VISION_UNAVAILABLE);
+    }
+
+    @ExceptionHandler(VisionRateLimitedException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public Map<String, String> handleVisionRateLimited(VisionRateLimitedException e) {
+        return Map.of(RESPONSE_KEY_MESSAGE, ERROR_VISION_RATE_LIMITED);
+    }
+
+    @ExceptionHandler(VisionUpstreamException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public Map<String, String> handleVisionUpstream(VisionUpstreamException e) {
+        return Map.of(RESPONSE_KEY_MESSAGE, ERROR_VISION_UPSTREAM);
     }
 }

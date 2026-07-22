@@ -2,11 +2,19 @@ package com.rxscan.backend.extraction;
 
 import com.rxscan.backend.extraction.parse.FieldConfidence;
 import com.rxscan.backend.extraction.parse.VisionMedRaw;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 /**
  * Pure unit test over {@link GeminiVisionExtractionClient#parseResponse(String)} — no Spring
@@ -96,5 +104,40 @@ class GeminiVisionExtractionClientTest {
     void empty_candidates_array_yields_an_empty_list() {
         List<VisionMedRaw> meds = GeminiVisionExtractionClient.parseResponse("{\"candidates\": []}");
         assertThat(meds).isEmpty();
+    }
+
+    private static GeminiVisionExtractionClient clientBoundTo(MockServerHolder holder) {
+        RestClient.Builder builder = RestClient.builder();
+        holder.server = MockRestServiceServer.bindTo(builder).build();
+        return new GeminiVisionExtractionClient("k", "gemini-2.0-flash", "https://example/v1beta", builder);
+    }
+
+    /** Tiny mutable holder so the test can grab the bound server after the client is built. */
+    private static final class MockServerHolder {
+        MockRestServiceServer server;
+    }
+
+    @Test
+    void upstream_429_maps_to_rate_limited_exception() {
+        MockServerHolder h = new MockServerHolder();
+        GeminiVisionExtractionClient client = clientBoundTo(h);
+        h.server.expect(requestTo(Matchers.containsString(":generateContent")))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                        .body("{\"error\":{\"code\":429,\"status\":\"RESOURCE_EXHAUSTED\"}}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.extract(new byte[]{1, 2, 3}, "image/png"))
+                .isInstanceOf(VisionRateLimitedException.class);
+    }
+
+    @Test
+    void upstream_server_error_maps_to_upstream_exception() {
+        MockServerHolder h = new MockServerHolder();
+        GeminiVisionExtractionClient client = clientBoundTo(h);
+        h.server.expect(requestTo(Matchers.containsString(":generateContent")))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body("boom"));
+
+        assertThatThrownBy(() -> client.extract(new byte[]{1, 2, 3}, "image/png"))
+                .isInstanceOf(VisionUpstreamException.class);
     }
 }

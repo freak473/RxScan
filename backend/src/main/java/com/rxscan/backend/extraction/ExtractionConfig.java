@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.client.RestClient;
 
 /**
  * Wires the extraction feature together. {@link #visionExtractionClient} is the one optional
@@ -50,8 +51,9 @@ public class ExtractionConfig {
     VisionExtractionClient visionExtractionClient(
             @Value(API_KEY_PLACEHOLDER) String apiKey,
             @Value(MODEL_PROPERTY) String model,
-            @Value(BASE_URL_PROPERTY) String baseUrl) {
-        return new GeminiVisionExtractionClient(apiKey, model, baseUrl);
+            @Value(BASE_URL_PROPERTY) String baseUrl,
+            RestClient.Builder restClientBuilder) {
+        return new GeminiVisionExtractionClient(apiKey, model, baseUrl, restClientBuilder);
     }
 
     @Bean

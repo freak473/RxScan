@@ -3,7 +3,9 @@ package com.rxscan.backend.extraction;
 import com.rxscan.backend.extraction.parse.FieldConfidence;
 import com.rxscan.backend.extraction.parse.VisionMedRaw;
 import org.springframework.http.MediaType;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -86,24 +88,37 @@ public final class GeminiVisionExtractionClient implements VisionExtractionClien
     private final String model;
     private final RestClient restClient;
 
-    public GeminiVisionExtractionClient(String apiKey, String model, String baseUrl) {
+    private static final String ERR_RATE_LIMITED = "Vision model rate-limited (HTTP 429)";
+    private static final String ERR_UPSTREAM = "Vision model call failed";
+
+    public GeminiVisionExtractionClient(String apiKey, String model, String baseUrl,
+                                        RestClient.Builder builder) {
         this.apiKey = apiKey;
         this.model = model;
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+        this.restClient = builder.baseUrl(baseUrl).build();
     }
 
     @Override
     public List<VisionMedRaw> extract(byte[] image, String mediaType) {
         String requestBody = MAPPER.writeValueAsString(buildRequestBody(image, mediaType));
 
-        String responseBody = restClient.post()
-                .uri(uriBuilder -> uriBuilder.path(PATH_TEMPLATE)
-                        .queryParam(QUERY_PARAM_API_KEY, apiKey)
-                        .build(model))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(requestBody)
-                .retrieve()
-                .body(String.class);
+        String responseBody;
+        try {
+            responseBody = restClient.post()
+                    .uri(uriBuilder -> uriBuilder.path(PATH_TEMPLATE)
+                            .queryParam(QUERY_PARAM_API_KEY, apiKey)
+                            .build(model))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            // Quota / rate limit — transient. Surface as 503 (retry) not an opaque 500.
+            throw new VisionRateLimitedException(ERR_RATE_LIMITED, e);
+        } catch (RestClientException e) {
+            // Any other upstream 4xx/5xx or transport failure → 502 (bad gateway).
+            throw new VisionUpstreamException(ERR_UPSTREAM, e);
+        }
 
         return parseResponse(responseBody);
     }

@@ -95,4 +95,24 @@ class ExtractionControllerTest {
         mockMvc.perform(multipart("/extract").file(image))
                 .andExpect(status().isServiceUnavailable());
     }
+
+    @Test
+    void vision_rate_limited_returns_503() throws Exception {
+        MockMultipartFile image = new MockMultipartFile("image", "rx.jpg", JPEG, new byte[]{1, 2, 3});
+        when(extractionService.extract(any(), eq(JPEG)))
+                .thenThrow(new VisionRateLimitedException("rate limited"));
+
+        mockMvc.perform(multipart("/extract").file(image))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void vision_upstream_failure_returns_502() throws Exception {
+        MockMultipartFile image = new MockMultipartFile("image", "rx.jpg", JPEG, new byte[]{1, 2, 3});
+        when(extractionService.extract(any(), eq(JPEG)))
+                .thenThrow(new VisionUpstreamException("upstream failed"));
+
+        mockMvc.perform(multipart("/extract").file(image))
+                .andExpect(status().isBadGateway());
+    }
 }
