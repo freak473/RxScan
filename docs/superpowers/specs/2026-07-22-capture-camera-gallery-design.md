@@ -16,7 +16,20 @@ one from the gallery**, and see that real image on the "Reading your
 prescription…" screen. Extraction itself stays mocked (hardcoded meds) — this
 change is about image acquisition + plumbing, not the extraction engine.
 
-## Decisions (locked)
+## Revision (2026-07-22, after hands-on testing)
+
+The original system-intent approach shipped, but on-device it felt like two
+steps (shutter → external camera app → confirm) and showed a mock viewfinder.
+**Pivoted to a real in-app CameraX live preview with one-tap capture.** Now:
+the shutter captures directly in-app (no external camera app); the branded
+viewfinder shows the actual live camera feed (no mock paper); the gallery
+button is unchanged. This adds CameraX deps + the runtime `CAMERA` permission
+(requested on the capture screen, separate from the app-level consent). The
+sections below marked "system intent / no CameraX / no permissions" are
+superseded by this revision; the URI-threading and Coil-on-Extracting design
+is unchanged.
+
+## Decisions (original — camera acquisition superseded by the revision above)
 
 - **Camera = system intent**, not CameraX. Tapping the shutter launches the
   phone's stock camera app via `ActivityResultContracts.TakePicture()`. Much

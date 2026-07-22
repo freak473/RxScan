@@ -1,15 +1,22 @@
 package com.rxscan.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,58 +31,111 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
-import com.rxscan.app.ui.theme.ChipPaper
-import com.rxscan.app.ui.theme.Green950
-import com.rxscan.app.ui.theme.Ink
-import com.rxscan.app.ui.theme.InkFamily
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import com.rxscan.app.ui.theme.White
 import java.io.File
 
 /**
- * Capture (design: scr-capture, dark). The branded viewfinder is now a launch
- * screen: the shutter opens the system camera (TakePicture), the gallery icon
- * beside it opens the Android photo picker (PickVisualMedia). Both hand the
- * resulting image URI to [onCapture]. No CameraX, no runtime permissions.
- * Copy and framing still match the design (top hint, brackets, steadiness hint).
+ * Capture (design: scr-capture, dark). A real in-app CameraX live preview sits
+ * inside the branded viewfinder: the shutter captures directly (one tap, no
+ * external camera app), the gallery icon beside it opens the Android photo
+ * picker. Both hand the resulting image URI to [onCapture]. Design chrome
+ * (top hint, corner brackets, steadiness hint, promise line) is preserved.
  */
 @Composable
 fun CaptureScreen(onCapture: (Uri) -> Unit) {
     val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Pre-created cache file + FileProvider URI the camera app writes the photo into.
-    val cameraUri = remember {
-        val dir = File(ctx.cacheDir, "captures").apply { mkdirs() }
-        val file = File(dir, "rx_capture.jpg")
-        FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+    // Camera runtime permission (separate from the app-level consent screen).
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> hasCameraPermission = granted }
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    // System camera: on success the photo is at cameraUri. Cancel → success=false → no-op.
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture(),
-    ) { success -> if (success) onCapture(cameraUri) }
+    // CameraX: PreviewView surface + a single ImageCapture use case, bound once
+    // permission is granted.
+    val previewView = remember { PreviewView(ctx) }
+    val imageCapture = remember { ImageCapture.Builder().build() }
+    LaunchedEffect(hasCameraPermission) {
+        if (!hasCameraPermission) return@LaunchedEffect
+        val providerFuture = ProcessCameraProvider.getInstance(ctx)
+        providerFuture.addListener({
+            val provider = providerFuture.get()
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
+            }
+            try {
+                provider.unbindAll()
+                provider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageCapture,
+                )
+            } catch (_: Exception) {
+                // Binding can fail on devices/emulators without a usable camera;
+                // the gallery path still works.
+            }
+        }, ContextCompat.getMainExecutor(ctx))
+    }
 
-    // Android photo picker: returns a content URI directly. Cancel → null → no-op.
+    // Shutter → capture directly to a cache file, then hand the URI forward.
+    fun capture() {
+        val dir = File(ctx.cacheDir, "captures").apply { mkdirs() }
+        val file = File(dir, "rx_capture.jpg")
+        if (file.exists()) file.delete()
+        val options = ImageCapture.OutputFileOptions.Builder(file).build()
+        imageCapture.takePicture(
+            options,
+            ContextCompat.getMainExecutor(ctx),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(results: ImageCapture.OutputFileResults) {
+                    onCapture(Uri.fromFile(file))
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    // Swallow for this UI pass; user can retry or use gallery.
+                }
+            },
+        )
+    }
+
+    // Gallery → photo picker (no permission needed). Cancel → null → no-op.
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(onCapture) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(listOf(Color(0xFF0B241E), Green950)),
+                Brush.verticalGradient(listOf(Color(0xFF0B241E), Color(0xFF06130F))),
             )
             .padding(horizontal = 22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -97,57 +157,47 @@ fun CaptureScreen(onCapture: (Uri) -> Unit) {
 
         Spacer(Modifier.height(22.dp))
 
-        // Frame with corner brackets around the mock paper
+        // Frame: live camera preview (or a permission placeholder) + corner brackets
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             contentAlignment = Alignment.Center,
         ) {
-            // Corner brackets
-            CornerBrackets()
-
-            // The paper
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth(0.82f)
-                    .rotate(-1.4f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(ChipPaper)
-                    .padding(18.dp),
-            ) {
-                Row(
+            if (hasCameraPermission) {
+                AndroidView(
+                    factory = { previewView },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .fillMaxWidth(0.94f)
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.94f)
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(White.copy(alpha = 0.06f))
+                        .clickable { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        "Dr. A. Sharma · MBBS, MD",
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
-                        color = Color(0xFFB9AE8F), modifier = Modifier.weight(1f),
+                        "Tap to allow the camera\n— or upload from gallery below",
+                        color = White.copy(alpha = 0.7f), fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
                     )
-                    Text("11/07/26", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFB9AE8F))
                 }
-                Text("℞", fontFamily = InkFamily, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color(0xFFB9AE8F))
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Augmentin 625 — 1-0-1 ×5d (a/f)\nPantocid 4? — 1-0-0 (b/f)\nAscoril LS — 1-1-1\nTab Dolo 650 — SOS",
-                    fontFamily = InkFamily, fontSize = 15.sp, lineHeight = 26.sp, color = Ink,
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Dr. Sharma",
-                    fontFamily = InkFamily, fontSize = 14.sp, color = Ink.copy(alpha = 0.8f),
-                    modifier = Modifier.align(Alignment.End),
-                )
             }
+
+            // Corner brackets overlay
+            CornerBrackets()
         }
 
         Spacer(Modifier.height(14.dp))
 
         // Steadiness hint
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
             Text("●", color = Color(0xFF7CC7B4), fontSize = 11.sp)
             Spacer(Modifier.width(7.dp))
             Text("Good light · hold steady", color = White.copy(alpha = 0.7f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -165,7 +215,7 @@ fun CaptureScreen(onCapture: (Uri) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            // Shutter → system camera
+            // Shutter → in-app capture (re-requests permission if not yet granted)
             Box(
                 modifier = Modifier
                     .size(74.dp)
@@ -174,7 +224,13 @@ fun CaptureScreen(onCapture: (Uri) -> Unit) {
                     .padding(6.dp)
                     .clip(CircleShape)
                     .background(White)
-                    .clickable { cameraLauncher.launch(cameraUri) },
+                    .clickable {
+                        if (hasCameraPermission) {
+                            capture()
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    },
             )
 
             // Gallery → photo picker (far left, vertically centered on the shutter)
