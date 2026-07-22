@@ -68,6 +68,7 @@ The rest is polish. A user can't actually *use* RxScan until these three land:
 - [ ] End-to-end save: Verify → confirmed meds → persisted schedule → Today reflects real state — _owner:__ · L
 - [ ] **Phase 0 eval harness** — the actual accuracy risk; validate extraction on real prescriptions — _owner:__ · L
 - [ ] Vision provider + paid key decision (free quota is scarce — see CLAUDE.md) — _owner:__ · S
+- [ ] **Close Gupshup contract for OTP SMS** — vendor chosen (Gupshup, SMS only — no WhatsApp OTP for now); needs DLT sender-ID + template registration + account creds. `GupshupOtpSender` is coded and config-gated; until creds land, OTP is the static stub `000000` (`rxscan.otp.provider=stub`) — _owner:__ · S
 
 ### Release
 - [ ] Signed release APK + distribution channel — _owner:__ · S
