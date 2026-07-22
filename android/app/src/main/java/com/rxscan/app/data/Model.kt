@@ -5,7 +5,12 @@ package com.rxscan.app.data
 // CDSCO invariant: a flag names the field and asks for a re-check — there is NO
 // field anywhere for a system-suggested value. The user types what the paper says.
 
-enum class FlagKind { STRENGTH, DURATION }
+// STRENGTH/DURATION have bespoke inputs (text ≥2 chars; numeric 1–60 days).
+// OTHER is the generic re-check box for any other flagged field (frequency, name,
+// meal…) the backend can raise — free-text, non-empty, still forces a confirm and
+// never carries a suggested value. Critically it means a high-harm flag like
+// non-daily frequency is never silently dropped (CLAUDE.md invariant).
+enum class FlagKind { STRENGTH, DURATION, OTHER }
 
 /** A re-check flag: title + plain-language body + an EMPTY input. Never a suggestion. */
 data class ReCheckFlag(

@@ -51,6 +51,8 @@ fun RxScanNav() {
     // Captured/picked prescription image, threaded capture → extracting. Plain remember:
     // a transient cache-file URI needn't survive process death for this UI pass.
     var capturedUri by remember { mutableStateOf<Uri?>(null) }
+    // Real extracted medicines (from POST /extract), threaded extracting → verify.
+    var meds by remember { mutableStateOf<List<com.rxscan.app.data.Medication>>(emptyList()) }
 
     NavHost(navController = nav, startDestination = Routes.WELCOME) {
         composable(Routes.WELCOME) {
@@ -66,14 +68,24 @@ fun RxScanNav() {
             })
         }
         composable(Routes.EXTRACTING) {
-            ExtractingScreen(imageUri = capturedUri, onDone = {
-                nav.navigate(Routes.VERIFY) {
-                    popUpTo(Routes.EXTRACTING) { inclusive = true }
-                }
-            })
+            ExtractingScreen(
+                imageUri = capturedUri,
+                onExtracted = { extracted ->
+                    meds = extracted
+                    nav.navigate(Routes.VERIFY) {
+                        popUpTo(Routes.EXTRACTING) { inclusive = true }
+                    }
+                },
+                // Back to camera to retake/re-pick on an unrecoverable error.
+                onBack = {
+                    nav.navigate(Routes.CAPTURE) {
+                        popUpTo(Routes.EXTRACTING) { inclusive = true }
+                    }
+                },
+            )
         }
         composable(Routes.VERIFY) {
-            VerifyScreen(onAllConfirmed = { nav.navigate(Routes.MEAL_TIMES) })
+            VerifyScreen(meds = meds, onAllConfirmed = { nav.navigate(Routes.MEAL_TIMES) })
         }
         composable(Routes.MEAL_TIMES) {
             // "Set my reminders" = the save moment → deferred sign-in (Q13).

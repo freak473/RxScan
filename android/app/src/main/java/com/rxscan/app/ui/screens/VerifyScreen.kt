@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.data.FlagKind
 import com.rxscan.app.data.Medication
-import com.rxscan.app.data.MockData
 import com.rxscan.app.share.DoctorShare
 import com.rxscan.app.ui.components.InkChip
 import com.rxscan.app.ui.components.PaperCard
@@ -93,8 +92,7 @@ import java.util.Locale
  *    system value (CDSCO: flag, don't correct).
  */
 @Composable
-fun VerifyScreen(onAllConfirmed: () -> Unit) {
-    val meds = MockData.prescription
+fun VerifyScreen(meds: List<Medication>, onAllConfirmed: () -> Unit) {
     var confirmed by rememberSaveable { mutableStateOf(setOf<String>()) }
     var resolved by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var nameEdits by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
@@ -584,6 +582,7 @@ private fun FlagBox(
     val valid = when (flag.kind) {
         FlagKind.DURATION -> typed.trim().matches(Regex("^\\d{1,2}$")) && typed.trim().toInt() in 1..60
         FlagKind.STRENGTH -> typed.trim().length >= 2
+        FlagKind.OTHER -> typed.trim().isNotEmpty()
     }
     val savedCurrent = resolvedValue != null && typed.trim() == resolvedValue
 
