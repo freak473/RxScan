@@ -1,8 +1,10 @@
 package com.rxscan.app.ui.screens
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,9 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.rxscan.app.ui.theme.ChipPaper
 import com.rxscan.app.ui.theme.DisplayFamily
 import com.rxscan.app.ui.theme.Faint
@@ -58,7 +62,7 @@ private val steps = listOf(
 )
 
 @Composable
-fun ExtractingScreen(onDone: () -> Unit) {
+fun ExtractingScreen(imageUri: Uri? = null, onDone: () -> Unit) {
     // step state: index of the step currently "doing"; done = everything before it
     var doing by remember { mutableIntStateOf(0) }
 
@@ -78,27 +82,42 @@ fun ExtractingScreen(onDone: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
-        // The paper being read
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.72f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(ChipPaper)
-                .border(1.dp, PaperLine, RoundedCornerShape(8.dp))
-                .padding(16.dp),
-        ) {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                Text(
-                    "Dr. A. Sharma · MBBS, MD",
-                    fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
-                    color = Color(0xFFB9AE8F), modifier = Modifier.weight(1f),
-                )
-                Text("11/07/26", fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFB9AE8F))
-            }
-            Text(
-                "Augmentin 625 — 1-0-1 ×5d (a/f)\nPantocid 4? — 1-0-0 (b/f)\nAscoril LS — 1-1-1\nTab Dolo 650 — SOS",
-                fontFamily = InkFamily, fontSize = 14.sp, lineHeight = 24.sp, color = Ink,
+        // The paper being read: the real captured/picked photo, or the mock
+        // paper as a fallback (keeps @Preview and the null path working).
+        if (imageUri != null) {
+            AsyncImage(
+                model = imageUri,
+                contentDescription = "Your prescription photo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth(0.72f)
+                    .aspectRatio(0.72f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ChipPaper)
+                    .border(1.dp, PaperLine, RoundedCornerShape(8.dp)),
             )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.72f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ChipPaper)
+                    .border(1.dp, PaperLine, RoundedCornerShape(8.dp))
+                    .padding(16.dp),
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    Text(
+                        "Dr. A. Sharma · MBBS, MD",
+                        fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
+                        color = Color(0xFFB9AE8F), modifier = Modifier.weight(1f),
+                    )
+                    Text("11/07/26", fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFB9AE8F))
+                }
+                Text(
+                    "Augmentin 625 — 1-0-1 ×5d (a/f)\nPantocid 4? — 1-0-0 (b/f)\nAscoril LS — 1-1-1\nTab Dolo 650 — SOS",
+                    fontFamily = InkFamily, fontSize = 14.sp, lineHeight = 24.sp, color = Ink,
+                )
+            }
         }
 
         Spacer(Modifier.height(26.dp))

@@ -1,5 +1,9 @@
 package com.rxscan.app.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,31 +19,58 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.rxscan.app.ui.theme.ChipPaper
 import com.rxscan.app.ui.theme.Green950
 import com.rxscan.app.ui.theme.Ink
 import com.rxscan.app.ui.theme.InkFamily
 import com.rxscan.app.ui.theme.White
+import java.io.File
 
 /**
- * Capture (design: scr-capture, dark). The viewfinder shows a mock paper — the
- * real camera arrives when behavior is wired. Copy and framing match the design:
- * top hint, corner brackets, steadiness hint, shutter with promise line.
+ * Capture (design: scr-capture, dark). The branded viewfinder is now a launch
+ * screen: the shutter opens the system camera (TakePicture), the gallery icon
+ * beside it opens the Android photo picker (PickVisualMedia). Both hand the
+ * resulting image URI to [onCapture]. No CameraX, no runtime permissions.
+ * Copy and framing still match the design (top hint, brackets, steadiness hint).
  */
 @Composable
-fun CaptureScreen(onCapture: () -> Unit) {
+fun CaptureScreen(onCapture: (Uri) -> Unit) {
+    val ctx = LocalContext.current
+
+    // Pre-created cache file + FileProvider URI the camera app writes the photo into.
+    val cameraUri = remember {
+        val dir = File(ctx.cacheDir, "captures").apply { mkdirs() }
+        val file = File(dir, "rx_capture.jpg")
+        FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+    }
+
+    // System camera: on success the photo is at cameraUri. Cancel → success=false → no-op.
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { success -> if (success) onCapture(cameraUri) }
+
+    // Android photo picker: returns a content URI directly. Cancel → null → no-op.
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let(onCapture) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -129,17 +160,45 @@ fun CaptureScreen(onCapture: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
 
-        // Shutter
+        // Shutter (centered) with the gallery icon to its left, camera-app style.
         Box(
-            modifier = Modifier
-                .size(74.dp)
-                .clip(CircleShape)
-                .border(4.dp, White.copy(alpha = 0.45f), CircleShape)
-                .padding(6.dp)
-                .clip(CircleShape)
-                .background(White)
-                .clickable(onClick = onCapture),
-        )
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            // Shutter → system camera
+            Box(
+                modifier = Modifier
+                    .size(74.dp)
+                    .clip(CircleShape)
+                    .border(4.dp, White.copy(alpha = 0.45f), CircleShape)
+                    .padding(6.dp)
+                    .clip(CircleShape)
+                    .background(White)
+                    .clickable { cameraLauncher.launch(cameraUri) },
+            )
+
+            // Gallery → photo picker (far left, vertically centered on the shutter)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(White.copy(alpha = 0.12f))
+                    .clickable {
+                        galleryLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.PhotoLibrary,
+                    contentDescription = "Upload from gallery",
+                    tint = White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
         Spacer(Modifier.height(26.dp))
     }
 }

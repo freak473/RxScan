@@ -1,8 +1,10 @@
 package com.rxscan.app.ui
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
@@ -46,6 +48,9 @@ fun RxScanNav() {
     var phone by rememberSaveable { mutableStateOf("") }
     // Notification choice hoisted so Today can show the persistent silenced banner (PRD §6.4).
     var notifAllowed by rememberSaveable { mutableStateOf(true) }
+    // Captured/picked prescription image, threaded capture → extracting. Plain remember:
+    // a transient cache-file URI needn't survive process death for this UI pass.
+    var capturedUri by remember { mutableStateOf<Uri?>(null) }
 
     NavHost(navController = nav, startDestination = Routes.WELCOME) {
         composable(Routes.WELCOME) {
@@ -55,10 +60,13 @@ fun RxScanNav() {
             ConsentScreen(onContinue = { nav.navigate(Routes.CAPTURE) })
         }
         composable(Routes.CAPTURE) {
-            CaptureScreen(onCapture = { nav.navigate(Routes.EXTRACTING) })
+            CaptureScreen(onCapture = { uri ->
+                capturedUri = uri
+                nav.navigate(Routes.EXTRACTING)
+            })
         }
         composable(Routes.EXTRACTING) {
-            ExtractingScreen(onDone = {
+            ExtractingScreen(imageUri = capturedUri, onDone = {
                 nav.navigate(Routes.VERIFY) {
                     popUpTo(Routes.EXTRACTING) { inclusive = true }
                 }
