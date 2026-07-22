@@ -1,6 +1,5 @@
 package com.rxscan.backend.extraction;
 
-import com.rxscan.backend.extraction.parse.FieldConfidence;
 import com.rxscan.backend.extraction.parse.VisionMedRaw;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.HttpClientErrorException;
@@ -10,7 +9,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,35 +24,6 @@ import java.util.Map;
  * it is unit-testable without a live API call or a Spring context.
  */
 public final class GeminiVisionExtractionClient implements VisionExtractionClient {
-
-    // --- prompt: verbatim reads only; Indian Rx shorthand is expected as-is, never expanded ---
-    private static final String PROMPT = """
-            You are reading a photo of a handwritten or printed Indian medical prescription.
-
-            For each medicine on the prescription, extract exactly these fields, VERBATIM as
-            written on the paper:
-              - name: the medicine/brand name as written
-              - strength: the dose strength as written (e.g. "625mg", "40mg"), or null if absent
-              - doseNotation: the frequency exactly as written (e.g. "1-0-1", "BD", "TDS", "OD",
-                "HS", "SOS", "1-1-1-1"). Indian shorthand (BD/TDS/OD/HS/SOS, AC/PC, weekly,
-                alternate day) is expected — copy it exactly. Do NOT expand "1-0-1" into words,
-                do NOT normalize abbreviations, do NOT guess a schedule that isn't written.
-              - duration: the course length as written (e.g. "5 days", "x5d", "4 weeks"), or null
-                if absent. Do NOT normalize or convert units.
-              - meal: the meal relation as written (e.g. "before food", "after food", "AC", "PC"),
-                or null if absent. Do NOT infer a meal relation that isn't written.
-
-            Also include a "confidence" object per medicine with a 0.0-1.0 score for EACH of the
-            five fields above (name, strength, doseNotation, duration, meal), reflecting how
-            legible/certain that specific field was.
-
-            Respond with ONLY a JSON array, one object per medicine, shaped exactly like:
-            [{"name": "...", "strength": "...", "doseNotation": "...", "duration": "...",
-              "meal": "...", "confidence": {"name": 0.0, "strength": 0.0, "doseNotation": 0.0,
-              "duration": 0.0, "meal": 0.0}}]
-
-            No prose, no markdown fences, no explanation — JSON only.
-            """;
 
     // --- request shape (Gemini generateContent) ---
     private static final String PATH_TEMPLATE = "/models/{model}:generateContent";
@@ -75,12 +44,6 @@ public final class GeminiVisionExtractionClient implements VisionExtractionClien
     private static final String RES_CONTENT = "content";
     private static final String RES_PARTS = "parts";
     private static final String RES_TEXT = "text";
-    private static final String RES_NAME = "name";
-    private static final String RES_STRENGTH = "strength";
-    private static final String RES_DOSE_NOTATION = "doseNotation";
-    private static final String RES_DURATION = "duration";
-    private static final String RES_MEAL = "meal";
-    private static final String RES_CONFIDENCE = "confidence";
 
     private static final ObjectMapper MAPPER = JsonMapper.builder().build();
 
@@ -129,7 +92,7 @@ public final class GeminiVisionExtractionClient implements VisionExtractionClien
         inlineData.put(REQ_DATA, Base64.getEncoder().encodeToString(image));
 
         Map<String, Object> imagePart = Map.of(REQ_INLINE_DATA, inlineData);
-        Map<String, Object> textPart = Map.of(REQ_TEXT, PROMPT);
+        Map<String, Object> textPart = Map.of(REQ_TEXT, VisionResponseSupport.PROMPT);
         Map<String, Object> content = Map.of(REQ_PARTS, List.of(textPart, imagePart));
 
         Map<String, Object> generationConfig = new LinkedHashMap<>();
@@ -167,38 +130,6 @@ public final class GeminiVisionExtractionClient implements VisionExtractionClien
             return List.of();
         }
 
-        JsonNode meds = MAPPER.readTree(text);
-        if (!meds.isArray()) {
-            return List.of();
-        }
-
-        List<VisionMedRaw> result = new ArrayList<>();
-        for (JsonNode med : meds) {
-            result.add(toVisionMedRaw(med));
-        }
-        return result;
-    }
-
-    private static VisionMedRaw toVisionMedRaw(JsonNode med) {
-        JsonNode conf = med.path(RES_CONFIDENCE);
-        FieldConfidence confidence = new FieldConfidence(
-                conf.path(RES_NAME).asDouble(0.0),
-                conf.path(RES_STRENGTH).asDouble(0.0),
-                conf.path(RES_DOSE_NOTATION).asDouble(0.0),
-                conf.path(RES_DURATION).asDouble(0.0),
-                conf.path(RES_MEAL).asDouble(0.0));
-
-        return new VisionMedRaw(
-                textOrNull(med, RES_NAME),
-                textOrNull(med, RES_STRENGTH),
-                textOrNull(med, RES_DOSE_NOTATION),
-                textOrNull(med, RES_DURATION),
-                textOrNull(med, RES_MEAL),
-                confidence);
-    }
-
-    private static String textOrNull(JsonNode node, String field) {
-        JsonNode value = node.path(field);
-        return (value.isMissingNode() || value.isNull()) ? null : value.asString();
+        return VisionResponseSupport.parseMedicines(text);
     }
 }
