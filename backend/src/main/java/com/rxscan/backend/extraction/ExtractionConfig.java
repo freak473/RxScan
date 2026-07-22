@@ -51,9 +51,10 @@ public class ExtractionConfig {
     VisionExtractionClient visionExtractionClient(
             @Value(API_KEY_PLACEHOLDER) String apiKey,
             @Value(MODEL_PROPERTY) String model,
-            @Value(BASE_URL_PROPERTY) String baseUrl,
-            RestClient.Builder restClientBuilder) {
-        return new GeminiVisionExtractionClient(apiKey, model, baseUrl, restClientBuilder);
+            @Value(BASE_URL_PROPERTY) String baseUrl) {
+        // RestClient.Builder is not an auto-configured bean in this modular Boot setup, so build
+        // one here. The client keeps a builder-taking constructor purely for test injection.
+        return new GeminiVisionExtractionClient(apiKey, model, baseUrl, RestClient.builder());
     }
 
     @Bean
