@@ -66,6 +66,16 @@ DTOs/APIs/interceptor/PayloadMapper+test · RxScanStore · Room+PrescriptionRepo
 SyncRepository · screens/RxScanNav rewired to the real API — OTP demo branch removed, `000000`
 is the real dev stub). **Resume at Task 7** (final build + manual emulator smoke vs local backend).
 
+**Reminder plane — spec approved (2026-07-23):** full PRD reminder-firing plane designed and
+approved (branch `feat/reminder-plane`): chained next-dose exact alarm (one armed at a time;
+inexact-alarm fallback replaces the PRD's WorkManager fallback — user-approved deviation), real
+POST_NOTIFICATIONS + skippable exact-alarm Settings step, grouped discreet notification
+(Taken/Snooze 30m/Skip, system-default sound, `dose_reminders` high + `course_updates` default
+channels), adherence log in Room synced inside the opaque payload (no new backend endpoints),
+course auto-stop, Today/Progress rewired to real doses. Spec:
+`docs/superpowers/specs/2026-07-23-reminder-plane-design.md`. Next: implementation plan
+(superpowers:writing-plans), then build.
+
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
 
