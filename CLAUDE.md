@@ -40,15 +40,19 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
   **manually via the app** (capture → `POST /extract`), not in the test suite.
 
 ## Current status (last updated 2026-07-23)
-**Backend consumer plane:** schema reworked (`app_user`→`users`, BIGINT identity ids,
-`user_consent` + `user_preference` tables, `created_at`/`updated_at` + `set_updated_at()` trigger
-everywhere, both DBs re-provisioned). Consumer API v1 design approved →
-`docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md` (OTP stub `000000` default,
-`GupshupOtpSender` config-gated — SMS only, no WhatsApp; JWT sub = `users.public_id`, opaque
-payload). **Implementation plan ready:** `docs/superpowers/plans/2026-07-23-consumer-api-v1-slice-a.md`
-(backend slice A; FE wiring is a follow-up plan). Tech design bumped to **v0.2.3**
-(`docs/rxscan-tech-design-v0_2_3.md`) — consumer schema/contract sections now match the spec.
-Post-commit hook in `.claude/settings.local.json` enforces the CLAUDE.md-update rule.
+**Backend consumer plane — slice A DONE:** all 8 consumer endpoints live and smoke-tested against
+the real dev DBs — `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `PUT /v1/me/consents`,
+`PUT`/`GET /v1/me/preferences`, `POST`/`PATCH /v1/prescriptions`, `GET /v1/prescriptions?since=`.
+Schema reworked (`app_user`→`users`, BIGINT identity ids, `user_consent` + `user_preference`
+tables, `created_at`/`updated_at` + `set_updated_at()` trigger everywhere, both DBs re-provisioned).
+Stub OTP `000000` (`GupshupOtpSender` config-gated — SMS only, no WhatsApp, real creds pending);
+JWT sub = `users.public_id`, opaque `payload` round-tripped verbatim. FE-facing contract doc:
+`docs/api-contract-v1.md` (supersedes the design spec as the day-to-day reference; spec is still
+`docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md`, plan is
+`docs/superpowers/plans/2026-07-23-consumer-api-v1-slice-a.md`). Tech design at **v0.2.3**
+(`docs/rxscan-tech-design-v0_2_3.md`). Use system `mvn` on this machine, never `./mvnw` (broken —
+see Toolchain). Post-commit hook in `.claude/settings.local.json` enforces the CLAUDE.md-update
+rule. FE wiring to the consumer API in progress (docs/superpowers/plans/2026-07-23-consumer-api-v1-fe-wiring.md; worktree `rxscan-fe`, branch `fe/consumer-wiring`).
 
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
