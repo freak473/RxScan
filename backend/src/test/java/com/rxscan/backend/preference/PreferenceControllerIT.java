@@ -53,4 +53,28 @@ class PreferenceControllerIT extends ConsumerApiTestBase {
                 .andExpect(status().isPayloadTooLarge())
                 .andExpect(jsonPath("$.error.code").value("payload_too_large"));
     }
+
+    @Test
+    void nonObjectPayloadIs422() throws Exception {
+        String token = signIn("9876500008");
+        mvc.perform(put("/v1/me/preferences").header("Authorization", "Bearer " + token)
+                        .contentType(APPLICATION_JSON).content("{\"payload\":\"just-a-string\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("invalid_payload"));
+    }
+
+    @Test
+    void undecryptableStoredBlobIsUniform500() throws Exception {
+        String token = signIn("9876500010");
+        mvc.perform(put("/v1/me/preferences").header("Authorization", "Bearer " + token)
+                        .contentType(APPLICATION_JSON).content("{\"payload\":{\"schema\":1}}"))
+                .andExpect(status().isNoContent());
+        // Scoped to this test's own row (the one just upserted), so other IT methods sharing
+        // the same JVM-wide container/table aren't affected by the corruption.
+        consumerJdbc.update("UPDATE user_preference SET payload_enc = decode('deadbeef','hex') " +
+                "WHERE user_id = (SELECT user_id FROM user_preference ORDER BY updated_at DESC LIMIT 1)");
+        mvc.perform(get("/v1/me/preferences").header("Authorization", "Bearer " + token))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("internal_error"));
+    }
 }
