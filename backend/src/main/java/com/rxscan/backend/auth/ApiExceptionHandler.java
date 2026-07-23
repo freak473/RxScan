@@ -1,5 +1,7 @@
 package com.rxscan.backend.auth;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -9,6 +11,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(ApiException.class)
     ResponseEntity<Map<String, Object>> api(ApiException e) {
         return ResponseEntity.status(e.status)
@@ -17,6 +21,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(OtpDeliveryException.class)
     ResponseEntity<Map<String, Object>> otpDelivery(OtpDeliveryException e) {
+        log.error("OTP delivery failed", e);
         return ResponseEntity.status(503)
                 .body(Map.of("error", Map.of("code", "otp_delivery_failed", "message", "Could not send OTP — try again")));
     }
