@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 import javax.sql.DataSource;
 
@@ -41,6 +42,11 @@ public class DataSourceConfig {
     @Bean
     JdbcTemplate consumerJdbc(@Qualifier("consumerDataSource") DataSource ds) {
         return new JdbcTemplate(ds);
+    }
+
+    @Bean
+    JdbcClient consumerJdbcClient(@Qualifier("consumerDataSource") DataSource ds) {
+        return JdbcClient.create(ds);
     }
 
     // Each database is migrated from its own migration folder at startup.
