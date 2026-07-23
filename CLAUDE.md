@@ -79,7 +79,10 @@ Plan Task 3 (alarm chain + notification) done — `reminders/Channels.kt`, `Dose
 `ReminderScheduler.kt`, `Receivers.kt` (DoseAlarmReceiver/NotificationActionReceiver/BootReceiver,
 all FLAG_IMMUTABLE, goAsync), manifest wired (POST_NOTIFICATIONS/SCHEDULE_EXACT_ALARM/
 RECEIVE_BOOT_COMPLETED + 3 receivers), `ReminderScheduler.reschedule()` called from
-MainActivity.onCreate and RxScanNav's meal-times save + notif-perm save points. Build clean. Review fixes: receiver crash guard + course-notice lock-screen discretion.
+MainActivity.onCreate and RxScanNav's meal-times save + notif-perm save points. Build clean. Review fixes: receiver crash guard + course-notice lock-screen discretion. **Tasks 4–7 REMAIN**
+(real permissions · adherence sync · Today/Progress rewire · manual emulator smoke). Session
+paused at a clean boundary; branch `feat/reminder-plane` pushed. **Resume via the self-contained
+`docs/superpowers/HANDOVER-reminder-plane.md`** (SDD loop, resume base = branch HEAD).
 
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
