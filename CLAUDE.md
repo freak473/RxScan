@@ -50,6 +50,12 @@ payload). **Implementation plan ready:** `docs/superpowers/plans/2026-07-23-cons
 (`docs/rxscan-tech-design-v0_2_3.md`) — consumer schema/contract sections now match the spec.
 Post-commit hook in `.claude/settings.local.json` enforces the CLAUDE.md-update rule.
 
+**FE wiring (this branch, `fe/consumer-wiring`) — progress:** Tasks 1–5 of
+`docs/superpowers/plans/2026-07-23-consumer-api-v1-fe-wiring.md` committed (gradle deps ·
+DTOs/APIs/interceptor/PayloadMapper+test · RxScanStore · Room+PrescriptionRepository ·
+SyncRepository). **Resume at Task 6** (rewire Consent/Verify/MealTimes/Otp screens + RxScanNav
+to the real API), then Task 7 (final build + manual emulator smoke vs local backend).
+
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
 
