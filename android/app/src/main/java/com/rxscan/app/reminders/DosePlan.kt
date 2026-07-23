@@ -36,20 +36,22 @@ object DosePlan {
     // ongoing regimen; revisit only if year-long gaps between doses ever exist.
     private const val HORIZON_DAYS = 370L
 
-    fun slotTime(slot: String, mealTiming: String?, meals: MealTimesDto): LocalTime {
-        val meal = LocalTime.parse(
-            when (slot) {
-                "morning" -> meals.breakfast
-                "afternoon" -> meals.lunch
-                else -> meals.dinner
-            },
-        )
-        return when (mealTiming) {
-            "before_food" -> meal.minusMinutes(30)
-            "after_food" -> meal.plusMinutes(30)
-            else -> meal
-        }
+    private fun mealTime(slot: String, meals: MealTimesDto): LocalTime = LocalTime.parse(
+        when (slot) {
+            "morning" -> meals.breakfast
+            "afternoon" -> meals.lunch
+            else -> meals.dinner
+        },
+    )
+
+    private fun offsetMinutes(mealTiming: String?): Long = when (mealTiming) {
+        "before_food" -> -30L
+        "after_food" -> 30L
+        else -> 0L
     }
+
+    fun slotTime(slot: String, mealTiming: String?, meals: MealTimesDto): LocalTime =
+        mealTime(slot, meals).plusMinutes(offsetMinutes(mealTiming))
 
     private fun day1(payload: MedsPayloadDto): LocalDate = OffsetDateTime.parse(payload.confirmedAt).toLocalDate()
 
@@ -68,7 +70,7 @@ object DosePlan {
                             strength = med.strength,
                             slot = slot,
                             mealTiming = med.mealTiming,
-                            fireAt = date.atTime(slotTime(slot, med.mealTiming, meals)),
+                            fireAt = date.atTime(mealTime(slot, meals)).plusMinutes(offsetMinutes(med.mealTiming)),
                         )
                     }
                 }
@@ -116,7 +118,7 @@ object DosePlan {
             rx.payload.meds.mapNotNull { med ->
                 val days = med.durationDays
                 if (days == null || med.prn) return@mapNotNull null
-                val at = start.plusDays(days - 2L).atTime(LocalTime.parse(meals.dinner).plusMinutes(15))
+                val at = start.plusDays(days - 2L).atTime(LocalTime.parse(meals.dinner)).plusMinutes(15)
                 if (at > now) med.name to at else null
             }
         }.groupBy({ it.second }, { it.first })

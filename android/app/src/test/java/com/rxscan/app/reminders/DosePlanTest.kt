@@ -113,4 +113,11 @@ class DosePlanTest {
         val event = DosePlan.nextEvent(LocalDateTime.of(2026, 7, 23, 7, 0), rxs, MEALS)
         assertTrue(event is DoseFire) // notice day would be 07-22 (past) — filtered, dose still fires
     }
+
+    @Test fun `after food offset carries past midnight`() {
+        val meals = MealTimesDto(breakfast = "08:00", lunch = "13:30", dinner = "23:45")
+        val rxs = listOf(rx(med(slots = listOf("night")))) // after_food by default
+        val dose = DosePlan.dosesOn(LocalDate.of(2026, 7, 23), rxs, meals).single()
+        assertEquals(LocalDateTime.of(2026, 7, 24, 0, 15), dose.fireAt)
+    }
 }
