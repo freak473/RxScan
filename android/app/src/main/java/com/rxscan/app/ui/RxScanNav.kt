@@ -24,6 +24,7 @@ import com.rxscan.app.data.net.Network
 import com.rxscan.app.data.net.OtpRequestDto
 import com.rxscan.app.data.net.PreferencesPayloadDto
 import com.rxscan.app.data.net.toMedsPayload
+import com.rxscan.app.reminders.ReminderScheduler
 import com.rxscan.app.ui.screens.CaptureScreen
 import com.rxscan.app.ui.screens.ConsentScreen
 import com.rxscan.app.ui.screens.ExtractingScreen
@@ -147,7 +148,10 @@ fun RxScanNav() {
                         dinner = minutesToHHmm(dinner),
                     ),
                 )
-                scope.launch { store.saveMealTimesJson(gson.toJson(payload)) }
+                scope.launch {
+                    store.saveMealTimesJson(gson.toJson(payload))
+                    ReminderScheduler.reschedule(context)
+                }
                 nav.navigate(Routes.SIGNIN)
             })
         }
@@ -188,6 +192,7 @@ fun RxScanNav() {
                 // denial IS the recorded choice (spec: notify consent arrives here).
                 notifAllowed = allowed
                 scope.launch {
+                    ReminderScheduler.reschedule(context)
                     val outcome = sync.pushNotifyConsent(allowed, OffsetDateTime.now().toString())
                     if (outcome is SyncOutcome.AuthExpired) {
                         // Contract rule: any 401 ⇒ clear the token and route to signin.

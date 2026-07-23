@@ -39,7 +39,7 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
   the request shape, `parseResponse`, and error mapping. Real extraction accuracy is validated
   **manually via the app** (capture → `POST /extract`), not in the test suite.
 
-## Current status (last updated 2026-07-23)
+## Current status (last updated 2026-07-24)
 **Backend consumer plane — slice A DONE:** all 8 consumer endpoints live and smoke-tested against
 the real dev DBs — `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `PUT /v1/me/consents`,
 `PUT`/`GET /v1/me/preferences`, `POST`/`PATCH /v1/prescriptions`, `GET /v1/prescriptions?since=`.
@@ -75,6 +75,11 @@ channels), adherence log in Room synced inside the opaque payload (no new backen
 course auto-stop, Today/Progress rewired to real doses. Spec:
 `docs/superpowers/specs/2026-07-23-reminder-plane-design.md`. Plan:
 `docs/superpowers/plans/2026-07-23-reminder-plane.md` (7 tasks, TDD, exact code). Plan Task 1 (DosePlan) done — pure dose arithmetic with 13 JVM tests (Review fix: AC/PC offset now day-carries past midnight). Plan Task 2 (adherence Room slice) done — AdherenceEventEntity + AdherenceDao + AdherenceRepository, Room v2 migration, PrescriptionDao.all()/updatePayload(), build clean.
+Plan Task 3 (alarm chain + notification) done — `reminders/Channels.kt`, `DoseNotifier.kt`,
+`ReminderScheduler.kt`, `Receivers.kt` (DoseAlarmReceiver/NotificationActionReceiver/BootReceiver,
+all FLAG_IMMUTABLE, goAsync), manifest wired (POST_NOTIFICATIONS/SCHEDULE_EXACT_ALARM/
+RECEIVE_BOOT_COMPLETED + 3 receivers), `ReminderScheduler.reschedule()` called from
+MainActivity.onCreate and RxScanNav's meal-times save + notif-perm save points. Build clean.
 
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
