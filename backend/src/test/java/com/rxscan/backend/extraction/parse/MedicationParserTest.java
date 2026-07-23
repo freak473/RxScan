@@ -1,75 +1,29 @@
 package com.rxscan.backend.extraction.parse;
 
-import com.rxscan.backend.formulary.MedicineNameParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * End-to-end orchestration over the design's demo meds, asserting the exact flag set per case and
- * the CDSCO invariant that a flag NEVER carries a value. Testcontainers pattern copied from
- * {@code BackendApplicationTests}; formulary seeded like {@code FormularyMatcherTest}.
+ * the CDSCO invariant that a flag NEVER carries a value.
+ *
+ * <p>Formulary matching is disabled (the {@code formulary_sku} catalog was dropped with the engine
+ * plane — users-only v1, platformisation deferred; see CLAUDE.md), so this parser is built with
+ * {@link FormularyMatcher#disabled()} — a plain unit test, no database, no Testcontainers. Every
+ * resolved {@code drug().formularyId()} is therefore always {@code null}; the flag/frequency/
+ * duration/meal assertions below are otherwise unchanged.
  */
-@SpringBootTest
 class MedicationParserTest {
-
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("postgres:16").withUsername("postgres").withPassword("test");
-
-    static {
-        POSTGRES.start();
-        try (Connection c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "postgres", "test");
-             Statement s = c.createStatement()) {
-            s.execute("CREATE DATABASE rxscan_engine");
-            s.execute("CREATE DATABASE rxscan_consumer");
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create test databases", e);
-        }
-    }
-
-    @DynamicPropertySource
-    static void datasources(DynamicPropertyRegistry registry) {
-        String base = "jdbc:postgresql://" + POSTGRES.getHost() + ":" + POSTGRES.getMappedPort(5432) + "/";
-        for (String plane : new String[]{"engine", "consumer"}) {
-            registry.add("app.datasource." + plane + ".jdbc-url", () -> base + "rxscan_" + plane);
-            registry.add("app.datasource." + plane + ".username", () -> "postgres");
-            registry.add("app.datasource." + plane + ".password", () -> "test");
-        }
-    }
-
-    @Autowired
-    @Qualifier("engineJdbc")
-    JdbcTemplate engineJdbc;
 
     private MedicationParser parser;
 
     @BeforeEach
-    void seed() {
-        engineJdbc.update("DELETE FROM formulary_sku");
-        insert("Augmentin 625 Duo Tablet", "GSK", null);
-        insert("Pantocid 40mg Tablet", "Sun Pharma", "40mg");
-        insert("Dolo 650 Tablet", "Micro Labs", null);
-        parser = new MedicationParser(new FormularyMatcher(engineJdbc));
-    }
-
-    private void insert(String brandName, String mfr, String strength) {
-        engineJdbc.update(
-                "INSERT INTO formulary_sku (brand_name, manufacturer, strength, form, name_normalized) "
-                        + "VALUES (?, ?, ?, ?, ?)",
-                brandName, mfr, strength, "Tablet", MedicineNameParser.normalize(brandName));
+    void setUp() {
+        parser = new MedicationParser(FormularyMatcher.disabled());
     }
 
     private static FieldConfidence high() {
@@ -81,12 +35,12 @@ class MedicationParserTest {
     }
 
     @Test
-    void clean_medicine_resolves_and_raises_no_flags() {
+    void clean_medicine_raises_no_flags_and_leaves_formulary_unresolved() {
         MedParseResult r = parser.parse(new VisionMedRaw(
                 "Augmentin 625 Duo", "625mg", "1-0-1", "5 days", "after food", high()));
 
         assertThat(r.drug().value()).isEqualTo("Augmentin 625 Duo"); // never rewritten
-        assertThat(r.drug().formularyId()).isNotNull();
+        assertThat(r.drug().formularyId()).isNull(); // formulary matching disabled
         assertThat(r.frequency().pattern()).isEqualTo(Pattern.DAILY);
         assertThat(r.frequency().slots()).isEqualTo(new Slots(1, 0, 1, 0));
         assertThat(r.mealTiming().value()).isEqualTo(Meal.AFTER);
@@ -101,15 +55,6 @@ class MedicationParserTest {
                 "Augmentin 625 Duo", null, "1-0-1", "5 days", "after food",
                 new FieldConfidence(0.95, 0.30, 0.95, 0.95, 0.95)));
         assertThat(reasons(r)).contains(FlagReason.STRENGTH_UNREADABLE);
-    }
-
-    @Test
-    void read_strength_conflicting_with_formulary_flags_anomaly() {
-        // Pantocid SKU strength is 40mg; the read says 20mg → anomaly (never auto-corrected).
-        MedParseResult r = parser.parse(new VisionMedRaw(
-                "Pantocid 40mg", "20mg", "1-0-1", "5 days", "before food", high()));
-        assertThat(r.strength().value()).isEqualTo("20mg"); // left exactly as read
-        assertThat(reasons(r)).contains(FlagReason.STRENGTH_ANOMALY);
     }
 
     @Test

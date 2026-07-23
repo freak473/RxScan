@@ -34,13 +34,14 @@ class SyncRepository(context: Context) {
     private val prescriptions = PrescriptionRepository(context)
     private val gson = Gson()
 
-    suspend fun verifyOtpAndSync(phone: String, otp: String): SyncOutcome {
-        val consents = store.loadConsentsJson()
-            ?.let { gson.fromJson(it, Array<ConsentDto>::class.java).toList() }
-            ?: emptyList()
-
+    /**
+     * Login-first flow (v2): OTP verify happens BEFORE consent/capture, so it no
+     * longer bundles consents — [pushConsents] sends those separately once the user
+     * has actually seen the consent screen post-login.
+     */
+    suspend fun verifyOtp(phone: String, otp: String): SyncOutcome {
         val response = try {
-            Network.authApi.verifyOtp(OtpVerifyRequestDto(phone, otp, consents))
+            Network.authApi.verifyOtp(OtpVerifyRequestDto(phone, otp, emptyList()))
         } catch (e: HttpException) {
             return if (e.code() == 401) SyncOutcome.InvalidOtp else SyncOutcome.Failure
         } catch (_: IOException) {
@@ -48,27 +49,19 @@ class SyncRepository(context: Context) {
         }
 
         store.saveToken(response.token)
-        store.clearConsents()
-
-        return try {
-            pushPendingPrescriptions()
-            pushPreferences()
-            SyncOutcome.Success(response.userCreated)
-        } catch (e: HttpException) {
-            if (e.code() == 401) {
-                store.saveToken(null)
-                SyncOutcome.AuthExpired
-            } else {
-                SyncOutcome.Failure // token is already saved; a later retry re-pushes from Room/DataStore
-            }
-        } catch (_: IOException) {
-            SyncOutcome.Network
-        }
+        return SyncOutcome.Success(response.userCreated)
     }
 
-    /** notify consent, sent after the notif-permission screen (spec: arrives after login). */
-    suspend fun pushNotifyConsent(granted: Boolean, grantedAt: String): SyncOutcome = try {
-        Network.meApi.putConsents(ConsentsPutRequestDto(listOf(ConsentDto("notify", granted, grantedAt))))
+    /** Consent screen, now post-login: PUTs process + retain_optin directly. */
+    suspend fun pushConsents(process: Boolean, retainOptIn: Boolean, at: String): SyncOutcome = try {
+        Network.meApi.putConsents(
+            ConsentsPutRequestDto(
+                listOf(
+                    ConsentDto("process", process, at),
+                    ConsentDto("retain_optin", retainOptIn, at),
+                ),
+            ),
+        )
         SyncOutcome.Success(userCreated = false)
     } catch (e: HttpException) {
         if (e.code() == 401) {
@@ -79,6 +72,40 @@ class SyncRepository(context: Context) {
         }
     } catch (_: IOException) {
         SyncOutcome.Network
+    }
+
+    /**
+     * After the notif-permission screen: push the notify consent, then flush
+     * whatever's pending in Room/DataStore (confirmed meds + meal-time prefs).
+     */
+    suspend fun finalizeSync(notifyGranted: Boolean, at: String): SyncOutcome {
+        try {
+            Network.meApi.putConsents(ConsentsPutRequestDto(listOf(ConsentDto("notify", notifyGranted, at))))
+        } catch (e: HttpException) {
+            return if (e.code() == 401) {
+                store.saveToken(null)
+                SyncOutcome.AuthExpired
+            } else {
+                SyncOutcome.Failure
+            }
+        } catch (_: IOException) {
+            return SyncOutcome.Network
+        }
+
+        return try {
+            pushPendingPrescriptions()
+            pushPreferences()
+            SyncOutcome.Success(userCreated = false)
+        } catch (e: HttpException) {
+            if (e.code() == 401) {
+                store.saveToken(null)
+                SyncOutcome.AuthExpired
+            } else {
+                SyncOutcome.Failure // token is already saved; a later retry re-pushes from Room/DataStore
+            }
+        } catch (_: IOException) {
+            SyncOutcome.Network
+        }
     }
 
     private suspend fun pushPendingPrescriptions() {

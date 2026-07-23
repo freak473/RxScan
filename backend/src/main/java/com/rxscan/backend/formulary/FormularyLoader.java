@@ -5,11 +5,10 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -21,27 +20,33 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One-off bulk loader for the engine-plane formulary catalogue.
+ * Self-seeding bulk loader for the formulary catalogue.
  *
- * <p>Reads {@code Extensive_A_Z_medicines_dataset_of_India.csv} and upserts each row into
- * {@code formulary_sku}. Gated behind {@code formulary.load.enabled=true} so it never runs on a
- * normal boot; the upsert on {@code (name_normalized, manufacturer)} makes re-running safe and
- * collapses the CSV's exact-duplicate rows.
+ * <p>Runs on every boot but is a no-op once {@code formulary_sku} has rows: it only imports the CSV
+ * when the table is <em>empty</em> (a fresh/reset database). Postgres persists the catalogue across
+ * restarts, so a normal boot just does one {@code SELECT count(*)} and returns. The upsert on
+ * {@code (name_normalized, manufacturer)} keeps a re-seed idempotent and collapses the CSV's
+ * exact-duplicate rows.
+ *
+ * <p>If the table is empty but the CSV isn't present, seeding is skipped with a WARN — the app
+ * still starts (formulary matching simply returns no candidates until the catalogue is loaded).
+ *
+ * <p>Excluded from the {@code test} profile so integration tests never import 256k rows into their
+ * Testcontainers database.
  *
  * <p>Only name + manufacturer + parsed strength/form + discontinued flag are stored — no
  * ingredients, indications, or substitutions (non-advisory invariant). This is a matching aid.
  *
- * <p>Run once with, e.g.:
- * <pre>./mvnw spring-boot:run -Dspring-boot.run.arguments="\
- *   --formulary.load.enabled=true \
- *   --formulary.load.csv-path=../Extensive_A_Z_medicines_dataset_of_India.csv"</pre>
+ * <p>CSV path defaults to {@code Extensive_A_Z_medicines_dataset_of_India.csv} at the repo root and
+ * is searched relative to the working directory; override with {@code formulary.load.csv-path}.
  */
 @Component
-@ConditionalOnProperty(name = "formulary.load.enabled", havingValue = "true")
+@Profile("!test")
 public class FormularyLoader implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(FormularyLoader.class);
     private static final int BATCH_SIZE = 1_000;
+    private static final String DEFAULT_CSV = "Extensive_A_Z_medicines_dataset_of_India.csv";
 
     private static final String UPSERT = """
             INSERT INTO formulary_sku
@@ -55,20 +60,55 @@ public class FormularyLoader implements ApplicationRunner {
                 updated_at      = now()
             """;
 
-    private final JdbcTemplate engineJdbc;
+    private final JdbcTemplate jdbc;
     private final String csvPath;
 
-    public FormularyLoader(@Qualifier("engineJdbc") JdbcTemplate engineJdbc,
-                           @Value("${formulary.load.csv-path}") String csvPath) {
-        this.engineJdbc = engineJdbc;
+    public FormularyLoader(JdbcTemplate jdbc,
+                           @Value("${formulary.load.csv-path:" + DEFAULT_CSV + "}") String csvPath) {
+        this.jdbc = jdbc;
         this.csvPath = csvPath;
     }
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        Path path = Path.of(csvPath);
-        log.info("Formulary load starting from {}", path.toAbsolutePath());
+        Long existing = jdbc.queryForObject("SELECT count(*) FROM formulary_sku", Long.class);
+        if (existing != null && existing > 0) {
+            log.info("Formulary already populated ({} SKUs) — skipping CSV seed.", existing);
+            return;
+        }
 
+        Path path = resolveCsv();
+        if (path == null) {
+            log.warn("formulary_sku is empty but no CSV found (looked for '{}' relative to {}). "
+                            + "Formulary matching will return no candidates until seeded — set "
+                            + "formulary.load.csv-path to the dataset to auto-seed on next boot.",
+                    csvPath, Path.of("").toAbsolutePath());
+            return;
+        }
+        log.info("formulary_sku is empty — seeding from {}", path.toAbsolutePath());
+        load(path);
+    }
+
+    /**
+     * Resolve the CSV across the likely working directories (repo root when run from there, or one
+     * level up when the working dir is {@code backend/}). Returns null if nothing readable is found.
+     */
+    private Path resolveCsv() {
+        Path configured = Path.of(csvPath);
+        if (Files.isReadable(configured)) {
+            return configured;
+        }
+        String fileName = configured.getFileName().toString();
+        for (String base : new String[]{".", "..", "backend/..", "../.."}) {
+            Path candidate = Path.of(base, fileName);
+            if (Files.isReadable(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private void load(Path path) throws Exception {
         CSVFormat format = CSVFormat.DEFAULT.builder()
                 .setHeader()
                 .setSkipHeaderRecord(true)
@@ -118,7 +158,7 @@ public class FormularyLoader implements ApplicationRunner {
             upserted += flush(batch);
         }
 
-        log.info("Formulary load done: {} rows read, {} upserted, {} skipped (blank name/manufacturer)",
+        log.info("Formulary seed done: {} rows read, {} upserted, {} skipped (blank name/manufacturer)",
                 read, upserted, skipped);
     }
 
@@ -126,7 +166,7 @@ public class FormularyLoader implements ApplicationRunner {
         if (batch.isEmpty()) {
             return 0;
         }
-        int[] rows = engineJdbc.batchUpdate(UPSERT, batch);
+        int[] rows = jdbc.batchUpdate(UPSERT, batch);
         return rows.length;
     }
 

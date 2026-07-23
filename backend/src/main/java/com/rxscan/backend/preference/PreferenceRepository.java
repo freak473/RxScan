@@ -1,6 +1,5 @@
 package com.rxscan.backend.preference;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -14,7 +13,7 @@ public class PreferenceRepository {
 
     private final JdbcClient jdbc;
 
-    public PreferenceRepository(@Qualifier("consumerJdbcClient") JdbcClient jdbc) {
+    public PreferenceRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 

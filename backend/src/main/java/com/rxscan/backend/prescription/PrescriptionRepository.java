@@ -1,6 +1,5 @@
 package com.rxscan.backend.prescription;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -22,7 +21,7 @@ public class PrescriptionRepository {
 
     private final JdbcClient jdbc;
 
-    public PrescriptionRepository(@Qualifier("consumerJdbcClient") JdbcClient jdbc) {
+    public PrescriptionRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 

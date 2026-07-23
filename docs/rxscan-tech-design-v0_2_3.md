@@ -2,11 +2,29 @@
 
 ### Scan a prescription → verified medication reminders
 
-**Version:** 0.2.3 (engineering handoff — requirements closed)
-**Pairs with:** `prescription-reminders-prd-v0_4_1.md` (product), `RxScan-v2-design-v3.html` (UX)
+**Version:** 0.2.4-draft (engineering handoff — requirements closed)
+**Pairs with:** `prescription-reminders-prd-v0_4_2.md` (product), `RxScan-v2-design-v3.html` (UX)
 **Scope:** v1 backend + Android client + partner-ready extraction API
 **Last updated:** 23 July 2026
 
+> **Changed in v0.2.4-draft:** Three architecture changes. **(A) Single database:** the two-plane
+> engine/consumer split (§1, §5, §6) is **replaced for v1** by one `rxscan` Postgres database
+> holding only `users`, `user_consent`, `user_preference`, `prescription`, `adherence_event`. The
+> engine-plane tables (`extraction_job`, `formulary_sku`, `correction`, `retained_item`,
+> `client_key`, `usage_meter`, `consent_provenance`) are **dropped**; extraction is now
+> **stateless** (image → parse → return, nothing persisted server-side) and formulary matching is
+> **disabled**. This is a deferral, not an abandonment — the engine/consumer split and
+> platformisation (partner API, metering, retained eval set) return when the product
+> platformises; see the "deferred" call-outs threaded through §1, §5, §6, §7, §8. **(B)
+> Account-first:** the app flow is now phone entry → OTP (mocked `000000` in dev) → consents →
+> capture → extracting → verify → mealtimes → notif-permission → dashboard, with **persistent
+> login** (a stored session skips straight to the dashboard; logout clears it) — see PRD §6 step 1.
+> **(C) Vision provider:** the vision-extraction call runs behind a pluggable
+> `VisionExtractionClient` interface (`claude`/`gemini`/`grok`/`kimi`/`openai`); the current default
+> is **Anthropic Claude** (`claude-sonnet-5`). One vision call + the deterministic parser is
+> unchanged (§2.3). Encryption model, consent capture, and data-minimisation posture are
+> unchanged.
+>
 > **Changed in v0.2.3 (consumer API v1 slice — aligns with `docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md`):**
 > Consumer schema reworked: `user` → **`users`** with **BIGINT identity `user_id` (internal-only — never client-visible, per the sequential-id rule)** plus **`public_id` UUID** as the JWT `sub` and any client-facing id. New tables: **`user_consent`** (append-only; FE holds consents locally pre-login and uploads them in the OTP-verify call) and **`user_preference`** (one encrypted FE-owned blob per user — meal times, toggles; server never parses it). Every table in **both** DBs now carries `created_at`/`updated_at`, maintained by a `set_updated_at()` trigger. Contract: `otp/verify` carries the consent list; added `PUT /v1/me/consents`, `PUT/GET /v1/me/preferences`. Slice A ships **JWT-only (no refresh token)**; OTP delivery via provider strategy — stub `000000` default, `GupshupOtpSender` ready (SMS only, no WhatsApp OTP).
 >
@@ -17,7 +35,7 @@
 > **Changed in v0.2 (aligns with PRD v0.4):** the local-only storage model is superseded. The user now has a **phone-OTP account**; the **confirmed prescription record is stored server-side, encrypted, keyed to a pseudonymous `userId`**; the **only PII is the phone number** (encrypted + keyed-HMAC blind index). The **server is the system of record**; the device keeps a **local cache (Room)** so reminders fire offline. The **extraction engine stays client-keyed and identity-free**, so the platform asset stays separable. **Encryption model resolved: envelope (server-decryptable) under a KMS/HSM master key** — recovers on lost device, and sufficient under DPDP Rule 6 (§9 Q9).
 
 > This doc translates the PRD into an implementable system. Three constraints are load-bearing on almost every decision below and are called out wherever they bite:
-> - **Two planes (PRD §7):** the *engine plane* (extraction, eval set, formulary) is client-keyed and knows no user; the *consumer plane* (phone-OTP account, prescription store) is the only place a user identity exists. They never mix.
+> - **Single database, users-only (v1):** one `rxscan` Postgres database holds `users`, `user_consent`, `user_preference`, `prescription`, `adherence_event`. Extraction is stateless and formulary matching is disabled. The v0.4/v0.2.2-era **two-plane split** (a client-keyed, identity-free *engine plane* for extraction/eval-set/formulary, isolated from a *consumer plane* holding the user identity) is **deferred, not abandoned** — it returns when the product platformises (partner API, metering, a retained eval set). Everywhere this doc still describes the two-plane target design, it's marked **(deferred)**.
 > - **Encrypt everything identity-linked (DPDP §3.2):** all prescription data is encrypted at rest under per-user envelope encryption; the phone number is the sole PII, stored encrypted with a blind index. Encryption is the safeguard that makes server-side health-data storage defensible.
 > - **Flag, don't correct (CDSCO §3.1):** the data model must never persist or transmit a *suggested* value for an anomalous field. A "correction" is a user action against an empty input, not a system output.
 
@@ -25,38 +43,39 @@
 
 ## 1. System context
 
-Two backend planes with a hard boundary between them. The **engine plane** processes images and knows no user. The **consumer plane** authenticates a user by phone-OTP and stores their encrypted prescription record. Partners touch only the engine plane.
+**v1 is a single backend, single database.** The app authenticates a user by phone-OTP *first* (PRD §6 step 1, persistent login), then calls a stateless extraction endpoint (image → parse → return, nothing persisted) and, once verified, saves the confirmed record into the one Postgres database.
 
 ```
-                    ┌─────────────────────────────────────────────────────┐
-                    │                   RxScan Backend                    │
-                    │                                                     │
-                    │  ENGINE PLANE (client-key, no user identity)        │
-  ┌────────────┐    │  ┌──────────────┐      ┌───────────────────┐        │
-  │  Android   │───▶│  │ Extraction   │─────▶│  Extraction       │        │
-  │  app       │◀───│  │ API (Spring) │      │  worker pipeline  │──▶ LLM │
-  └─────┬──────┘    │  └──────┬───────┘      └───────────────────┘  (DP)  │
-        │           │         │ formulary (~200K SKUs)                    │
-        │           │  ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
-        │ phone-OTP │  CONSUMER PLANE (phone-OTP → JWT, userId)           │
-        │  + JWT    │  ┌──────────────┐      ┌────────────────────────┐   │
-        └──────────▶│  │ Auth service │      │ Prescription store     │   │
-  ┌────────────┐    │  │ (phone+OTP)  │      │ ENCRYPTED, keyed userId │  │
-  │ Room cache │◀──▶│  └──────────────┘      │ (envelope enc / KMS)    │  │
-  │ on device  │    │   only PII = phone (encrypted + blind index)        │
-  └────────────┘    │                                                     │
-  ┌────────────┐    │  ENGINE PLANE only — same keyed/metered contract,   │
-  │ Partner    │───▶│  no user identity                                   │
-  └────────────┘    └─────────────────────────────────────────────────────┘
+                       ┌───────────────────────────────────────────────┐
+                       │              RxScan Backend                   │
+                       │        single `rxscan` Postgres database      │
+                       │                                                │
+  ┌────────────┐       │  ┌──────────────┐    ┌─────────────────────┐  │
+  │  Android   │──────▶│  │ Extraction   │───▶│ Vision LLM call +   │──┼──▶ LLM (DP,
+  │  app       │◀──────│  │ endpoint     │    │ deterministic parser│  │    Claude default)
+  └─────┬──────┘       │  │ (stateless)  │    │ (§2.3)              │  │
+        │              │  └──────────────┘    └─────────────────────┘  │
+        │              │  no formulary service, no job queue — nothing  │
+        │ phone-OTP    │  persisted by this call (image → parse → return)│
+        │  + JWT       │                                                │
+        │ (sign-in     │  ┌──────────────┐    ┌─────────────────────┐  │
+        │  first)      │  │ Auth service │    │ users / user_consent│  │
+        └─────────────▶│  │ (phone+OTP)  │    │ / user_preference / │  │
+  ┌────────────┐       │  └──────────────┘    │ prescription /      │  │
+  │ Room cache │◀─────▶│                       │ adherence_event     │  │
+  │ on device  │       │  only PII = phone     │ ENCRYPTED, keyed    │  │
+  └────────────┘       │  (encrypted + blind   │ userId (envelope    │  │
+                       │  index)               │ enc / KMS)          │  │
+                       │                       └─────────────────────┘  │
+                       └───────────────────────────────────────────────┘
 
   Device-to-doctor share (WhatsApp/SMS/email) NEVER transits the backend.
+  (Deferred) A separate client-keyed engine plane + partner lane returns with platformisation.
 ```
 
-**Engine plane** is stateless with respect to *users*: it authenticates *applications* (client keys), processes *images*, and its only durable per-record data is opt-in eval-set crops keyed to a pseudonymous **retention token** — never an account. This keeps it a clean, separable, sellable asset.
+**v1 reality:** one database, no user-anonymous engine store. Sign-in (phone + OTP) happens first; a stored session (persistent login) skips straight to the dashboard on relaunch. The extraction endpoint is stateless and, today, has no client-key or JWT check of its own (the app is the only caller, and every call happens to occur inside a logged-in session, but that isn't enforced server-side yet — see §4). Formulary matching is disabled; the result schema still carries a `formulary_id` field, just unpopulated until the service returns. The **confirmed prescription record is stored server-side, encrypted, under a pseudonymous `userId`**, in the same database as the account/consent/preference rows. The **server is the system of record**; the device holds a **Room cache** so reminders fire offline, and queues writes (new schedules, adherence events) for push on reconnect. Delete/export operate by `userId`.
 
-**Consumer plane** is where identity lives. The user signs in with **phone + OTP** (the only PII we hold), and their **confirmed prescription record is stored server-side, encrypted, under a pseudonymous `userId`**. The **server is the system of record**; the device holds a **Room cache** so reminders fire offline, and queues writes (new schedules, adherence events) for push on reconnect. Delete/export operate by `userId`.
-
-The two planes are deliberately isolated: the engine never learns who the user is, and the consumer store never mixes into the engine/eval data — so the platform asset (PRD §2.5) stays transferable without the consumer record.
+**(Deferred)** The two-plane design — an engine plane that authenticates *applications* (client keys), processes images, and durably retains only opt-in eval-set crops keyed to a pseudonymous **retention token**, isolated from a consumer plane holding the user identity — is the target architecture for when the product platformises (PRD §2.5). It is not what v1 ships.
 
 ---
 
@@ -70,69 +89,71 @@ The two planes are deliberately isolated: the engine never learns who the user i
 - Notification delivery: `AlarmManager` exact alarms with `SCHEDULE_EXACT_ALARM`/`USE_EXACT_ALARM` onboarding; **`WorkManager` windowed fallback + in-app warning** when exact alarms are denied or OEM battery optimization interferes.
 - Local persistence: **Room (SQLite) as an offline cache** of the server-owned record — schedule, adherence log, offline capture queue, meal-time prefs. The server is the system of record; Room exists so notifications fire without connectivity.
 - Native share sheet for ask-your-doctor and adherence-report (device-to-device; backend never involved).
-- **Auth: phone + OTP.** Scan/verify run before login; saving/scheduling requires a session (JWT). Holds the session token in the Android keystore; no other account PII on device.
+- **Auth: phone + OTP, first (v0.4.3).** Sign-in is the app's first step; capture/verify/save all run inside the resulting session. **Persistent login:** a valid stored session skips sign-in and opens straight to the dashboard; logout clears it. Holds the session token in the Android keystore; no other account PII on device.
 
 ### 2.2 Extraction API (Spring Boot)
-- `POST /v1/extractions` (multipart) → `202 { extraction_id }`; `GET /v1/extractions/{id}` for polling.
-- Client-key authentication + per-key metering/rate-limit; versioned contract; sandbox environment.
-- Enqueues extraction jobs; never blocks the request thread on the LLM.
-- Enforces idempotency, request-size caps, MIME/type validation.
+- **v1 (as built): `POST /extract`** (multipart) → synchronous `200` with the parsed, flag-annotated result. No job id, no polling — image → parse → return. No client-key or JWT check on this endpoint today (the app is the only caller; client-key auth is a pending backend task — see §4).
+- **(Deferred) Target contract:** `POST /v1/extractions` (multipart) → `202 { extraction_id }`; `GET /v1/extractions/{id}` for polling; client-key authentication + per-key metering/rate-limit; versioned contract; sandbox environment. Returns once the engine plane is reintroduced.
+- Enforces idempotency (deferred — no `Idempotency-Key` yet), request-size caps, MIME/type validation (implemented today).
 
-### 2.3 Extraction worker pipeline (async)
-Per PRD §7:
+### 2.3 Extraction pipeline (synchronous, v1)
+Per PRD §7, run inline on the request thread — no worker, no queue:
 ```
-preprocess (deskew, crop, enhance, strip letterhead band)
-  → Vision LLM (strict JSON schema + Indian Rx shorthand prompt, zero-retention)
-  → frequency grammar parser (1-0-1, BD, TDS, QID, OD, HS, SOS, AC/PC, stat, weekly, EOD)
-  → fuzzy match drug names vs formulary
-  → strength anomaly FLAG (never auto-correct)
-  → per-field confidence scoring (non-daily ⇒ force confirm)
-  → structured JSON + per-field crops
+preprocess (deskew, crop, enhance)
+  → Vision LLM call — one call per scan, verbatim read, strict JSON schema + Indian Rx
+    shorthand prompt (provider-pluggable: claude/gemini/grok/kimi/openai; default = Claude,
+    model claude-sonnet-5 — see §2.5)
+  → deterministic parser: frequency grammar (1-0-1, BD, TDS, QID, OD, HS, SOS, AC/PC, stat,
+    weekly, EOD), strength anomaly FLAG (never auto-correct), per-field confidence scoring
+    (non-daily ⇒ force confirm)
+  → structured JSON result, returned directly to the caller
 ```
-- Runs off a durable job queue with retry + dead-letter.
-- Calls the vision LLM under a **Data Processor agreement** with zero-retention / no-training API settings.
-- Writes result to the extraction store; source image is **discarded** unless the caller carries a valid retention token.
+- **Nothing is persisted.** No job row, no result store, no source-image retention — the response is the only artifact. This is a structural simplification, not just a policy: there is no `extraction_job` table to write to (§5).
+- **(Deferred)** letterhead-band stripping, fuzzy-match against a formulary, and per-field crop retention all belonged to the engine plane's job pipeline; none run in v1 (see §2.4).
+- Calls the vision LLM under a **Data Processor agreement** (zero-retention / no-training terms — verify per provider, PRD open Q7).
 
-### 2.4 Formulary service
-- ~200K Indian brand SKUs; fuzzy name match + strength validation.
-- Read-heavy, low write (periodic catalog refresh). Converts LLM near-misses into exact `formulary_id` matches; flags unknown strengths.
+### 2.4 Formulary service — disabled (deferred)
+- **v1: disabled.** `FormularyMatcher.disabled()` — no fuzzy name match, no strength validation; the result schema's `formulary_id` field is simply unpopulated. The ~200K-SKU catalog and its loader are dropped with the engine plane (`formulary_sku` table removed, §5).
+- **(Deferred) Target:** ~200K Indian brand SKUs, fuzzy name match + strength validation, converting LLM near-misses into exact `formulary_id` matches and flagging unknown strengths. Returns when the engine plane is reintroduced (§6.A has the full store evaluation, kept for that point).
 
-### 2.5 Vision LLM boundary (external Data Processor)
-- Model chosen by the Week-0 bake-off (§10 PRD). Provider is a **Data Processor**, not a sub-controller.
+### 2.5 Vision LLM boundary (external Data Processor, pluggable provider)
+- **Provider is pluggable**, selected by `rxscan.vision.provider` behind a `VisionExtractionClient` interface: `claude` (`ClaudeVisionExtractionClient`) · `gemini` (`GeminiVisionExtractionClient`) · `grok`/`kimi`/`openai` (shared `OpenAiCompatibleVisionExtractionClient`, OpenAI chat/completions shape). **Current default: Claude, model `claude-sonnet-5`.** Model/provider choice can still move per the Week-0 bake-off (§10 PRD) or later cost/accuracy data — the interface is what makes that a config change, not a rewrite.
+- Provider is a **Data Processor**, not a sub-controller.
 - Contractual: zero retention, no training on our data, region/transfer terms verified (PRD open Q7).
 - Treated as an unreliable dependency: timeouts, retries with backoff, circuit breaker, and a hard fallback to the honest-failure path ("couldn't read this — re-shoot").
 
-### 2.6 Auth service (consumer plane — phone + OTP)
+### 2.6 Auth service (phone + OTP, sign-in first)
 - `POST /v1/auth/otp/request` → send OTP to the phone via an SMS provider (a Data Processor); rate-limited per phone + per IP *(rate limiting deferred past slice A)*. Delivery is a provider strategy: stub `000000` default until the Gupshup contract closes; SMS only, no WhatsApp OTP.
-- `POST /v1/auth/otp/verify` → on match, mint a session (JWT; **refresh tokens deferred past slice A** — a `401` routes the app back to signin); create the `users` row on first verify. The request also carries the **consent list** the FE held locally pre-login.
+- `POST /v1/auth/otp/verify` → on match, mint a session (JWT; **refresh tokens deferred past slice A** — a `401` routes the app back to signin); create the `users` row on first verify. The request still carries a `consents` field for contract compatibility, but since account-first (v0.4.3) moved sign-in *before* the consent screen, the app always sends it empty — consents now arrive afterward via `PUT /v1/me/consents` (process/retain_optin right after the consent screen, notify after the notif-perm screen).
 - Identity = `user_id` (internal BIGINT identity, never client-visible) + `public_id` (UUID — the JWT `sub` and any client-facing id). The **phone number is the only PII**, stored **encrypted + as a keyed-HMAC blind index** so login can look up by phone without a plaintext column at rest.
 - No name, email, or address is ever collected.
 
-### 2.7 Prescription store (consumer plane — encrypted, system of record)
+### 2.7 Prescription store (encrypted, system of record)
 - Owns the confirmed prescription record (medicines, schedule, adherence) keyed to `userId`.
 - **All prescription fields encrypted at rest** under per-user envelope encryption: a per-user data-encryption-key (DEK) wrapped by a KMS/HSM master key; the DEK is unwrapped in memory per request, never persisted in plaintext (§7.1).
 - Serves authenticated CRUD; pushes changes to the device cache and ingests device-originated writes (new schedules, adherence events).
 - Owns **delete/export by `userId`** — the DPDP data-principal rights path.
-- Physically separate from the engine/eval stores (separability, PRD §2.5).
+- **v1:** lives in the same single `rxscan` database as everything else — there is no separate engine/eval store to be isolated from in v1 (§1, §5). **(Deferred)** physical separation from an engine/eval store returns as a separability control (PRD §2.5) when that store exists again.
 
 ---
 
 ## 3. Key request flows
 
-### 3.1 Scan → save → schedule (happy path)
+### 3.1 Sign in → scan → save → schedule (happy path, account-first)
 ```
-App: capture → POST /v1/extractions (multipart, client-key, [retention-token?])   [engine plane]
-API: validate → persist job (status=queued) → 202 {extraction_id}
-Worker: dequeue → preprocess → LLM → parse → formulary match → score
-        → persist result (status=complete) → discard image unless retention-token present
-App: poll GET /v1/extractions/{id} until complete (p50 < 8s target)
+App: on launch — stored session valid? → YES: skip straight to dashboard (persistent login)
+                                        → NO:  phone-OTP sign-in FIRST
+App: POST /v1/auth/otp/request {phone} → POST /v1/auth/otp/verify {phone, otp} → JWT
+     (consents field sent empty — consent capture now happens post-login, see §2.6)
+App: capture → POST /extract (multipart; no auth check on this endpoint yet — §2.2, §4)
+API: preprocess → vision LLM call → deterministic parser → 200 {parsed result}, synchronously
+     (no job id, no polling, no formulary match — nothing persisted; §2.3, §2.4)
 App: render verify cards → USER CONFIRMS EACH (hard gate) → capture meal times
-App: [if no session] prompt phone-OTP → POST /v1/auth/otp/{request,verify} → JWT   [consumer plane]
-App: POST /v1/prescriptions (JWT, confirmed record)  → server encrypts + stores under userId
+App: POST /v1/prescriptions (JWT, confirmed record) → server encrypts + stores under userId
 App: compute per-dose fire times → schedule AlarmManager/WorkManager
       → write schedule + course to Room cache (for offline firing)
 ```
-The extraction call carries **no user identity** (engine plane). The confirmed record is persisted **encrypted, under `userId`** (consumer plane), and mirrored to the device cache. Scan/verify run pre-login so the clinic-doorstep zero-friction promise holds; login is prompted at save.
+Sign-in now runs *before* capture, not at save — a stored session (persistent login) skips it entirely on relaunch; logging out clears the session. The extraction call is stateless and synchronous — no job id, no polling, no formulary match, nothing persisted. The confirmed record is persisted **encrypted, under `userId`**, and mirrored to the device cache. **(Deferred)** the two-plane version of this flow — extraction as an async, client-keyed job with polling and an optional retention token — returns with the engine plane; see the v0.2.3-era diagram this replaces.
 
 ### 3.2 Offline capture & offline save
 Photo → Room queue (`capture_queue`) → connectivity regained → upload → normal extraction flow → local notification "your check-list is ready." If the user confirms a schedule while offline, reminders schedule from the device cache immediately and the encrypted record is queued and pushed to `/v1/prescriptions` on reconnect. Queues survive app kill; retried with backoff.
@@ -150,12 +171,9 @@ Server-authoritative, so conflict handling is simple: server state wins on read;
 ```
 Account/record: DELETE /v1/me (JWT) → hard-delete the encrypted prescription record,
                 the user row, the phone ciphertext + blind index; then wipe Room cache.
-Eval crops:     if a retention token exists → DELETE /v1/retention/{token}
-                → hard-delete all crops/corrections for that token (rows + object blobs).
-Export:         GET /v1/me/export (JWT) → decrypted portable bundle
-                (schedule + adherence) + any retained-eval items by token.
+Export:         GET /v1/me/export (JWT) → decrypted portable bundle (schedule + adherence).
 ```
-Two independent erasure paths, because the user's record (by `userId`) and the opt-in eval set (by pseudonymous token) are separate DPDP purposes in separate stores. Delete-by-`userId` and delete-by-token are both first-class schema requirements (§5, §6.D, §6.H).
+Both are post-slice-A, DPDP launch-blockers (§4). **(Deferred)** a second erasure path — `DELETE /v1/retention/{token}` / `GET /v1/retention/{token}/export`, hard-deleting opt-in eval-set crops/corrections by pseudonymous token — existed in the v0.4 two-plane design and returns with the engine/eval store; there is no retained eval data in v1 to erase (§5, §6.D, §6.H are kept as the design for when it returns).
 
 ### 3.5 Ask-your-doctor / adherence-report share
 OS share sheet only. Crop + pre-written question (or adherence summary) handed to WhatsApp/SMS/email. **Never touches the backend** — keeps this feature entirely outside the DPDP processing surface.
@@ -164,9 +182,17 @@ OS share sheet only. Crop + pre-written question (or adherence summary) handed t
 
 ## 4. API contract (v1, expanded)
 
-Two auth domains. The **engine plane** authenticates by client key (`X-Client-Key` = the *application*, no user). The **consumer plane** authenticates the user by phone-OTP → JWT and is the only place a user identity exists.
+v1 has one auth domain: phone-OTP → JWT, and it runs *before* the extraction/verify/save
+sequence (account-first, PRD §6 step 1), not after. The extraction endpoint itself carries no
+auth check yet (see below).
 
-*Engine plane (client-key auth, no user identity):*
+*Extraction (v1, as built — no auth check on this endpoint yet):*
+
+| Method | Path | Purpose | Notes |
+|---|---|---|---|
+| `POST` | `/extract` | Submit image | multipart; synchronous `200` with the parsed result — no job id, no polling, no `Idempotency-Key`, no client key. The app is the only caller today (client-key auth is a pending backend task). |
+
+**(Deferred) Target engine-plane contract** — returns when the product platformises (client-key auth, `X-Client-Key` = the *application*, no user):
 
 | Method | Path | Purpose | Notes |
 |---|---|---|---|
@@ -177,12 +203,12 @@ Two auth domains. The **engine plane** authenticates by client key (`X-Client-Ke
 | `POST` | `/v1/corrections` | Submit user corrections | opt-in only; feeds eval set; carries retention token + provenance |
 | `GET` | `/v1/formulary/search` | (partner) drug lookup | optional B2B convenience endpoint |
 
-*Consumer plane (phone-OTP → JWT, `userId`):*
+*Authenticated endpoints (phone-OTP → JWT, `userId` — the only place a user identity exists):*
 
 | Method | Path | Purpose | Notes |
 |---|---|---|---|
 | `POST` | `/v1/auth/otp/request` | Send OTP | `{phone}`; rate-limited per phone + IP; SMS via Data Processor |
-| `POST` | `/v1/auth/otp/verify` | Verify + session | `{phone, otp, consents:[{purpose, granted, granted_at}]}` → JWT; creates `users` row on first verify |
+| `POST` | `/v1/auth/otp/verify` | Verify + session | `{phone, otp, consents:[{purpose, granted, granted_at}]}` → JWT; creates `users` row on first verify. **v0.4.3:** the app always sends `consents: []` here — sign-in now runs before the consent screen, so consent capture moved entirely to `PUT /v1/me/consents` below. |
 | `PUT` | `/v1/me/consents` | Upload consents post-login | JWT; append-only rows (e.g. `notify` from the notif-perm screen) |
 | `PUT` | `/v1/me/preferences` | Upsert preferences blob | JWT; FE-owned opaque JSON (meal times, toggles); encrypted; one row per user |
 | `GET` | `/v1/me/preferences` | Fetch preferences | JWT; device rehydrate |
@@ -202,7 +228,7 @@ blobs); the JWT `sub` is `users.public_id`, never the sequential `user_id`.
 {
   "status": "complete",
   "medications": [{
-    "drug":        { "value": "Pantocid 40mg", "formulary_id": "...", "confidence": 0.93,
+    "drug":        { "value": "Pantocid 40mg", "formulary_id": null, "confidence": 0.93,
                      "image_region": { "x": 0, "y": 0, "w": 0, "h": 0 } },
     "frequency":   { "raw": "1-0-1", "slots": ["morning","night"], "pattern": "daily", "confidence": 0.99 },
     "meal_timing": { "value": "before_food", "confidence": 0.97 },
@@ -215,20 +241,32 @@ blobs); the JWT `sub` is `users.public_id`, never the sequential `user_id`.
 - `duration.type ∈ days | ongoing | unspecified`
 - `frequency.pattern ∈ daily | weekly | alternate_day | prn` — any non-`daily` ⇒ forced confirm on client.
 - **CDSCO invariant:** a `flag` names the field and asks for re-check. It carries **no `suggested_value`**. There is no field in this schema through which the backend can propose a corrected dose. This is enforced by schema, not convention.
+- **v1: `formulary_id` is always `null`.** Formulary matching is disabled (§2.4); the field stays in the schema so re-enabling it is additive, not a breaking change.
 
 **Cross-cutting API rules**
-- **Idempotency:** `POST /v1/extractions` keyed by `Idempotency-Key`; a retried upload returns the original `extraction_id`, not a duplicate job.
-- **Versioning:** path-versioned (`/v1/…`); result schema is additive-only within a major version.
-- **Metering:** every extraction increments a per-key counter; rate limits + monthly caps enforced at the gateway.
-- **Errors:** `413` oversize, `415` bad type, `422` unprocessable image (routes client to re-shoot), `429` metered-out, `503` LLM unavailable (retryable).
+- **v1, as built:** `/extract` is synchronous, unauthenticated, and has no idempotency key — a retried upload just re-runs the vision call. Request-size/MIME validation is enforced (`413`/`415`); `422` unprocessable image and `503` LLM-unavailable/rate-limited are implemented (§2.3, `VisionUnavailableException`/`VisionRateLimitedException`).
+- **(Deferred) Target rules**, once the engine plane returns: **Idempotency** — `POST /v1/extractions` keyed by `Idempotency-Key`, a retried upload returns the original `extraction_id`, not a duplicate job; **Metering** — every extraction increments a per-key counter, rate limits + monthly caps enforced at the gateway; `429` metered-out.
+- **Versioning:** path-versioned (`/v1/…`) for the authenticated endpoints; result schema is additive-only within a major version.
 
 ---
 
 ## 5. Logical data model
 
-Two logical databases. The **engine store** (below, first group) carries no user identity. The **consumer store** (second group) holds the encrypted, `userId`-keyed record and is physically separate.
+**v1 (as built): one logical database, `rxscan`.** It holds only the five consumer-plane tables
+below (`users`, `user_consent`, `user_preference`, `prescription`, `adherence_event`) — encrypted
+where the field is sensitive, keyed to `userId`. There is no separate engine store in v1: the
+`extraction_job`, `formulary_sku`, `correction`, `retained_item`, `client_key`, `usage_meter`, and
+`consent_provenance` tables described below are **dropped**, not just unused — they don't exist in
+`V1__init.sql`. Extraction persists nothing (§2.3), so there's no job/result table to have; no
+formulary catalog is loaded (§2.4); there's no eval-set retention pathway, so no crops/corrections/
+retention-tokens/provenance log exist to store.
 
-### Engine store (no user identity)
+**(Deferred) Target: two logical databases.** The **engine store** (below, first group) would
+carry no user identity; the **consumer store** (second group) holds the encrypted, `userId`-keyed
+record and would be physically separate. This is the schema that returns when the product
+platformises (PRD §2.5) — kept here, unchanged, as the design to build from at that point.
+
+### (Deferred) Engine store (no user identity) — not present in v1
 
 **`extraction_job`** — transient, short TTL
 `extraction_id (pk)` · `client_key_id` · `status` · `idempotency_key` · `created_at` · `result (json)` · `retention_token?` · `expires_at`
@@ -254,7 +292,7 @@ Two logical databases. The **engine store** (below, first group) carries no user
 `event_id (pk)` · `retention_token` · `purpose ∈ {process, retain, backup}` · `granted` · `source` · `created_at` · `immutable`
 → **Insert-only.** No updates, no deletes except a token-scoped erasure that is itself a logged event. This is the DPDP + acquisition-diligence artifact (PRD §2.5, §3.2).
 
-### Consumer store (separate DB, encrypted, `userId`-keyed)
+### Consumer store — v1's entire database (encrypted, `userId`-keyed)
 
 **`users`** — the only PII, minimised
 `user_id (pk, BIGINT identity — internal-only, never client-visible)` · `public_id (UUID, unique — JWT sub / anything client-facing)` · `phone_enc` (ciphertext) · `phone_blind_idx` (keyed-HMAC, unique, indexed — login lookup) · `dek_wrapped` (per-user data key, wrapped by KMS master key) · `is_minor_verified`
@@ -262,7 +300,7 @@ Two logical databases. The **engine store** (below, first group) carries no user
 
 **`user_consent`** — append-only consent log
 `consent_id (pk)` · `user_id (fk, indexed)` · `purpose ∈ {process, notify, retain_optin}` · `granted` · `granted_at` (device-side grant time)
-→ Withdrawal = new row with `granted=false`, never an UPDATE. FE holds consents locally pre-login and uploads them at OTP verify; `created_at` is the server receipt.
+→ Withdrawal = new row with `granted=false`, never an UPDATE. **v0.4.3:** since sign-in now runs before the consent screen, consents no longer travel with `otp/verify` (that field is sent empty) — they're uploaded via `PUT /v1/me/consents` post-login instead (`process`/`retain_optin` right after the consent screen, `notify` after notif-perm). `created_at` is the server receipt.
 
 **`user_preference`** — encrypted FE-owned blob, exactly one row per user
 `user_id (pk, fk)` · `payload_enc` (meal times, toggles — server never parses it)
@@ -275,14 +313,15 @@ Two logical databases. The **engine store** (below, first group) carries no user
 **`adherence_event`** — encrypted history
 `event_id (pk)` · `user_id (indexed)` · `rx_id` · `payload_enc` (slot time, state ∈ {taken, skipped, snoozed})
 
-Every table in **both** DBs additionally carries `created_at` + `updated_at`, maintained by a
+Every table additionally carries `created_at` + `updated_at`, maintained by a
 `BEFORE UPDATE` trigger (`set_updated_at()`) — Postgres has no `ON UPDATE CURRENT_TIMESTAMP`.
+(The (deferred) engine store above would carry the same convention if/when it exists again.)
 
-→ Consumer-store access is **by `user_id`** (read/sync/delete/export). Device Room mirrors these as a disposable offline cache (`schedule`, `dose`, `adherence_event`, `meal_prefs`, `capture_queue`).
+→ Access is **by `user_id`** (read/sync/delete/export). Device Room mirrors these as a disposable offline cache (`schedule`, `dose`, `adherence_event`, `meal_prefs`, `capture_queue`).
 
 Three schema-level invariants worth restating because they're compliance firewalls, not preferences:
-1. Engine-store rows are **keyed to token or client, never to a person**; the consumer store is the *only* place a `userId` exists, and it lives in a separate database.
-2. Every sensitive field in the consumer store is inside an **encrypted payload** — no medical data or plaintext phone in queryable columns.
+1. **v1:** the single `rxscan` database is the *only* place a `userId` exists — there's no engine store to keep it out of, because there's no engine store. **(Deferred)** when the engine store returns, its rows must go back to being keyed to token or client, never to a person, so the platform asset stays separable (PRD §2.5).
+2. Every sensitive field in the (single, v1) store is inside an **encrypted payload** — no medical data or plaintext phone in queryable columns.
 3. No table anywhere stores a system-proposed corrected value for a flagged field.
 
 ---
@@ -292,6 +331,14 @@ Three schema-level invariants worth restating because they're compliance firewal
 This is the core of the doc. The PRD names PostgreSQL + S3 + "async worker queue" but leaves the store choices open. Below I evaluate candidates **per workload**, because RxScan has seven data workloads with genuinely different shapes, then give a consolidated recommendation.
 
 The governing principle: the engine plane stays small and mostly transient (transient jobs + an opt-in append-mostly eval set, no user identity), so it wants *one boring transactional store*. The consumer plane adds one deliberately-separate, **encrypted** store for the user's `userId`-keyed record. Specialized stores get added only where a workload's shape actually breaks Postgres — I show where each wins so the "add it later" triggers are explicit.
+
+> **v1 status of this section:** workloads A–F below (formulary, extraction jobs, job queue,
+> retained crops, metering, provenance log) all belong to the **engine plane, which is deferred**
+> (§1, §5) — none of them are built or needed in v1. Only **H** (user account + encrypted
+> prescription store) and **G** (on-device Room cache) exist today, and H is simply *the* database
+> now, not one of two. The analysis below is kept in full because it's the design to build from
+> when the product platformises — read it as "if/when the engine plane returns," not as v1's
+> current store layout. §6.9 restates this with a v1-as-built summary at the top.
 
 ### 6.0 The workloads
 
@@ -449,17 +496,23 @@ Two design axes matter more than the base engine: **(a) the encryption model** a
 
 ### 6.9 Consolidated recommendation
 
-**v1 — deliberately few stores:**
+**v1, as actually built:**
+
+| Store | Serves | Why |
+|---|---|---|
+| **PostgreSQL — single `rxscan` DB** | H only (`users`, `user_consent`, `user_preference`, `prescription`, `adherence_event`) | No engine-plane workloads (A–F) exist in v1 — see the callout at the top of §6 — so there is nothing to keep in a separate database. One database, app-layer envelope encryption for sensitive fields |
+| **KMS / HSM** | envelope-encryption master key for H | Master key never leaves the HSM; per-user DEKs wrapped/unwrapped through it; no standing human decrypt access |
+| **Room + DataStore (device)** | G | Disposable offline cache of the server record, so reminders fire without connectivity |
+
+No object storage is provisioned in v1 either — extraction doesn't persist the source image (§2.3), so there's nothing transient to hold. **(Deferred) Target — two Postgres DBs**, once the engine plane returns:
 
 | Store | Serves | Why |
 |---|---|---|
 | **PostgreSQL — engine DB** | B (jobs+results, `jsonb`), C (queue, `SKIP LOCKED`), A (formulary, `pg_trgm`), D-metadata, E (counters), F (provenance) | One transactional store removes every dual-write/consistency seam; low-volume, no user identity; you know it deeply |
 | **PostgreSQL — consumer DB (separate, encrypted)** | H (phone-OTP account + prescription record) | Separate logical DB with app-layer envelope encryption + RLS; isolates identity-linked health data and preserves §2.5 separability. Same technology, deliberately separate database |
 | **Object storage (S3-compatible)** | transient source images (lifecycle auto-delete), D crop blobs (encrypted) | Blobs never belong in a DB; lifecycle rules enforce data-minimisation automatically |
-| **KMS / HSM** | envelope-encryption master key for H | Master key never leaves the HSM; per-user DEKs wrapped/unwrapped through it; no standing human decrypt access |
-| **Room + DataStore (device)** | G | Disposable offline cache of the server record, so reminders fire without connectivity |
 
-**Explicitly *not* in v1, with the trigger that adds each:**
+**Explicitly *not* in v1 (nor in the deferred target until it platformises), with the trigger that adds each:**
 
 | Deferred store | Add when | For which workload |
 |---|---|---|
@@ -469,37 +522,37 @@ Two design axes matter more than the base engine: **(a) the encryption model** a
 | **Parquet / lake** | eval-set ML reads strain OLTP | D (derived, de-identified snapshot — never the erasable SoR) |
 | **Ledger DB** | acquirer diligence demands cryptographic non-repudiation | F (before that: hash-chain the Postgres log) |
 
-**The through-line:** the engine plane stays tiny, transient, and user-anonymous; the consumer plane adds exactly one deliberately-separate, encrypted Postgres DB for the `userId`-keyed record. Polyglot persistence beyond that is a *scaling response*, not a starting posture — every store you add is a new consistency domain, backup target, and (for health data) a new attack surface to secure and prove you can erase for DPDP. Start with the two Postgres DBs + object storage + KMS + Room; let measured pain, not anticipation, pull in Redis → Kafka → search → lake in that order. The consumer/engine split is the one up-front separation — not for scale, but to keep identity-linked health data contained and the platform asset cleanly transferable.
+**The through-line:** v1 ships the smallest thing that's honest — one Postgres database, one encrypted `userId`-keyed record, no engine plane at all, because there's no partner/eval/metering surface to isolate yet. **(Deferred)** when the product platformises, the engine plane comes back tiny, transient, and user-anonymous, with the consumer plane split back out as its own deliberately-separate, encrypted Postgres DB — and polyglot persistence beyond *that* remains a scaling response, not a starting posture: every store you add is a new consistency domain, backup target, and (for health data) a new attack surface to secure and prove you can erase for DPDP. Let measured pain, not anticipation, pull in Redis → Kafka → search → lake in that order, on top of the two-DB split, once it returns. The consumer/engine split is the one up-front separation worth re-introducing at that point — not for scale, but to keep identity-linked health data contained and the platform asset cleanly transferable.
 
 ---
 
 ## 7. Cross-cutting concerns
 
 ### 7.1 Security & DPDP mechanics
-- **Two planes, two identities.** The engine plane carries only a client key (+ optional pseudonymous retention token) and never learns who the user is — you cannot leak from the engine what it never holds. Identity exists *only* in the consumer plane, quarantined in its own encrypted database.
-- **Encryption of the consumer store (the load-bearing control).** All prescription/adherence data lives inside an **app-layer envelope-encrypted payload**: a per-user DEK encrypts the fields, and the DEK is wrapped by a **KMS/HSM master key**. The DB stores only ciphertext + wrapped DEKs; plaintext exists only in service memory during a request. The master key never leaves the HSM; there is **no standing human decrypt access**, and every unwrap is audit-logged.
+- **v1: one identity domain.** There's a single database and a single identity (`userId`); every authenticated endpoint (`/v1/me/**`, `/v1/prescriptions/**`) is scoped to it via `JwtInterceptor`. The `/extract` endpoint carries no identity check today (§2.2, §4). **(Deferred)** the "two planes, two identities" isolation — an engine plane holding only a client key + optional pseudonymous retention token, never learning who the user is — returns when the engine plane does.
+- **Encryption of the consumer store (the load-bearing control).** All prescription/adherence data lives inside an **app-layer envelope-encrypted payload**: a per-user DEK encrypts the fields, and the DEK is wrapped by a **KMS/HSM master key**. The DB stores only ciphertext + wrapped DEKs; plaintext exists only in service memory during a request. The master key never leaves the HSM; there is **no standing human decrypt access**, and every unwrap is audit-logged. Unchanged by the single-DB move — this is the one database now, not the consumer half of two.
 - **Phone minimisation.** Phone is the sole PII: stored as `phone_enc` + a keyed-HMAC `phone_blind_idx` for login lookup — no plaintext phone column. No name/email/address is ever collected.
-- **Cryptographic erasure.** `DELETE /v1/me` destroys the user's rows *and* their wrapped DEK — with the DEK gone, any residual ciphertext (backups, WAL) is unrecoverable. Integration-tested to assert zero recoverable data for a `userId`. Eval-set crops erase independently by token.
-- **Defence in depth:** Postgres RLS scopes every consumer query to one `userId`; TLS in transit; encryption at rest on both Postgres DBs and object storage; crop bucket private with signed, short-lived URLs.
-- **Data minimisation as infra:** source images live in object storage with a **lifecycle rule that deletes them minutes after extraction** — automatic, not dependent on app code. We store the *structured* record, never the image.
-- **Letterhead stripping** in preprocess, *before* any eval-set retention decision, so a retained crop can never contain doctor PII.
+- **Cryptographic erasure.** `DELETE /v1/me` destroys the user's rows *and* their wrapped DEK — with the DEK gone, any residual ciphertext (backups, WAL) is unrecoverable. Integration-tested to assert zero recoverable data for a `userId`. **(Deferred)** eval-set crops erasing independently by token — there's no eval-set store in v1 to erase.
+- **Defence in depth:** Postgres RLS scopes every query to one `userId`; TLS in transit; encryption at rest on the database. **(Deferred)** "both Postgres DBs" and the crop-bucket signed-URL control return with the engine plane and its object storage — v1 has neither a second database nor an object store to secure.
+- **Data minimisation as infra:** the source image is never persisted at all in v1 — extraction is stateless (§2.3), so there's no lifecycle rule to write because there's no file to expire. We store the *structured* record, never the image. **(Deferred)** the target design (transient object storage with a minutes-after-extraction lifecycle rule) applies once extraction becomes an async, job-backed engine-plane call again.
 - **Minors:** server persistence of a child's record is gated behind guardian verification; the local scan→verify path is unaffected (on-device before save).
-- **Access control + audit logging** on the consumer store, retained eval data, and provenance (DPDP mandate).
+- **Access control + audit logging** on the consumer store (DPDP mandate). **(Deferred)** retained eval data + provenance logging return with the engine plane.
 
 ### 7.2 Reliability
-- **Idempotent uploads** (`Idempotency-Key`) so retries don't double-charge or double-process.
-- **Worker retries** with exponential backoff; **dead-letter** status after N attempts → surfaces to the app as honest-failure, never a silent wrong guess.
-- **LLM circuit breaker + timeout**; on open circuit, return `503` retryable and let the app queue/retry.
+- **v1:** extraction is a single synchronous request/response — there's no job to retry or dead-letter. `VisionUnavailableException`/`VisionRateLimitedException`/`VisionUpstreamException` map to `503`/`503`/`502` so a failed vision call surfaces as an honest, retryable error to the app, never a silent wrong guess.
+- **(Deferred)** once extraction is async again: **idempotent uploads** (`Idempotency-Key`) so retries don't double-process; **worker retries** with exponential backoff; **dead-letter** status after N attempts.
+- **LLM circuit breaker + timeout** — still the goal for the synchronous call too; on failure, return `503` retryable and let the app retry.
 - **Exact-alarm degradation is a first-class UX path**, not an error: WorkManager fallback + explicit in-app warning when Android 14+ restrictions or OEM battery optimization bite.
 
 ### 7.3 Observability
-- Structured logs (Sumo Logic-friendly, given your stack) with **no PII and no image content** — log the `extraction_id`, field types, confidences, flag counts, timings; never the extracted drug values tied to anything identifying.
-- **The safety metric (PRD §9)** — confirmed-schedule audit error rate — needs the eval pipeline to sample opt-in confirmed schedules against source crops. Any undetected wrong field is a P0. Instrument confidence distributions and correction rates from beta.
-- Track p50/p95 extraction latency (target p50 < 8s), queue depth, DLQ rate, LLM error rate, per-key metering.
+- Structured logs (Sumo Logic-friendly, given your stack) with **no PII and no image content** — log field types, confidences, flag counts, timings; never the extracted drug values tied to anything identifying. **(Deferred)** there's no `extraction_id` to key logs by in v1 — the call has no persisted job record (§2.3).
+- **The safety metric (PRD §9)** — confirmed-schedule audit error rate — needs the eval pipeline to sample opt-in confirmed schedules against source crops. **(Deferred)** there's no eval-set/retained-crop pipeline in v1 to sample from; this metric can't be instrumented until the engine plane (and retained crops) return. Any undetected wrong field is still a P0 once it can be.
+- Track p50/p95 extraction latency (target p50 < 8s), LLM error rate. **(Deferred)** queue depth, DLQ rate, and per-key metering return with the async job queue and client-key layer.
 
 ### 7.4 Cost
-- Vision-LLM cost per scan is the dominant unit cost and sets both the free-tier cap and B2B pricing. PRD §7 sets the planning figure at **≈ ₹1/scan** via two-stage routing (Flash-class first, escalate low-confidence to Sonnet/Pro-class); meter the real number precisely from day one (PRD Q2 resolved, Q8 tunes the cap).
-- Object-storage cost is negligible with aggressive lifecycle expiry on source images.
+- Vision-LLM cost per scan is the dominant unit cost and sets both the free-tier cap and B2B pricing. PRD §7 sets the planning figure at **≈ ₹1/scan** via two-stage routing (Flash-class first, escalate low-confidence to Sonnet/Pro-class); meter the real number precisely from day one (PRD Q2 resolved, Q8 tunes the cap). **Current provider:** Claude (`claude-sonnet-5`) is the configured default (§2.5) — the pluggable `VisionExtractionClient` interface means swapping provider/model for the bake-off's answer, or for cost reasons, is a config change (`rxscan.vision.provider`/`.model`), not a rewrite.
+- **(Deferred)** per-key/per-partner metering and the resulting billing ledger (§6.E) return with the engine plane; v1 has no client-key layer to meter against.
+- No object-storage cost in v1 — there's no source-image or crop persistence to store or expire (§2.3, §7.1).
 
 ---
 
@@ -511,14 +564,14 @@ A table mapping the two regulatory firewalls onto things a developer must actual
 |---|---|
 | Flag, don't correct (CDSCO) | Result schema has **no `suggested_value`** field; flag UI binds to an empty input; no code path writes a proposed dose |
 | Non-advisory framing | No stored/derived "indication" or pseudo-generic; PRN shown in the paper's own words only |
-| Purpose-specific consent (DPDP) | Separable consent flags (account+store to remind / eval-retention / caregiver-v2); eval-retention default OFF; each logged to provenance |
-| Data minimisation | Source image auto-deleted by lifecycle rule; we store the structured record, not the image; **only the phone number is PII**, encrypted + blind-indexed; eval crops opt-in only |
-| Identity confined to consumer plane | Engine path keyed to client key + pseudonymous token; `userId` exists only in the separate encrypted consumer DB |
+| Purpose-specific consent (DPDP) | Separable consent flags (account+store to remind / eval-retention / caregiver-v2), uploaded via `PUT /v1/me/consents` post-login (§5); eval-retention default OFF. **(Deferred)** provenance logging of each grant returns with the engine plane's `consent_provenance` table |
+| Data minimisation | v1: the source image is never persisted — nothing to auto-delete (§2.3, §7.1); we store the structured record, not the image; **only the phone number is PII**, encrypted + blind-indexed. **(Deferred)** eval crops, opt-in only, return with the engine plane |
+| Identity confined to one database | v1: `userId` exists in the single `rxscan` database; there's no engine plane to keep it separate from. **(Deferred)** target: engine path keyed to client key + pseudonymous token, `userId` confined to a separate encrypted consumer DB |
 | Encryption of health data | App-layer envelope encryption (per-user DEK wrapped by KMS/HSM); DB holds only ciphertext; no standing human decrypt access; audit-logged unwraps |
-| Enforceable erasure/export | Consumer record: delete/export **by `userId`**, erasure destroys the wrapped DEK (cryptographic erasure), tested to completeness. Eval store: delete/export **by token** |
+| Enforceable erasure/export | User record: delete/export **by `userId`**, erasure destroys the wrapped DEK (cryptographic erasure), tested to completeness — post-slice-A (§4). **(Deferred)** eval store delete/export **by token** returns with the engine plane; there's no eval store in v1 to erase |
 | Minor consent | Server persistence of a child's record gated on guardian verification; local scan→verify path unaffected |
-| Breach readiness | Access logs + audit trail on retained data; runbook is a Phase-3 deliverable |
-| Diligence-ready provenance | Append-only consent log, WORM backup, per-item provenance from day one |
+| Breach readiness | Access logs + audit trail; runbook is a Phase-3 deliverable |
+| Diligence-ready provenance | Append-only consent log today. **(Deferred)** WORM backup + per-item eval-set provenance return with the engine plane |
 
 ---
 
@@ -528,16 +581,17 @@ Mirrors the PRD's product open-Qs where they have an engineering dimension, plus
 
 1. **Vision-LLM provider + Data Processor terms** (PRD Q7): confirmed zero-retention/no-training, and Indian-health-data transfer terms, *before* any real prescription is sent. Blocks Phase 1.
 2. **Cost per scan** at the chosen model (PRD Q2/Q8): drives free-tier cap and B2B price; instrument from the bake-off.
-3. **Formulary source + refresh:** where the ~200K SKU catalog comes from, licensing, and update cadence.
-4. **Preprocess pipeline:** on-device vs server-side deskew/crop/enhance trade-off (bandwidth + latency vs client complexity). Letterhead-strip must be server-side and pre-retention regardless.
+3. **Formulary source + refresh** *(deferred — no-op while formulary matching is disabled, §2.4)*: where the ~200K SKU catalog comes from, licensing, and update cadence, for whenever it's reintroduced.
+4. **Preprocess pipeline** *(not yet built)*: on-device vs server-side deskew/crop/enhance trade-off (bandwidth + latency vs client complexity). Letterhead-strip must be server-side and pre-retention regardless — moot until eval-set retention exists again.
 5. **Confidence thresholds:** the per-field and whole-image cutoffs that trigger forced-confirm vs honest-failure — set from bake-off data, not guessed.
-6. **Idempotency + poll strategy:** poll interval/backoff vs a lightweight push (v1 stays poll; revisit if p95 latency hurts UX).
-7. **Retention-token lifecycle:** rotation, and export-format spec (DPDP portability).
-8. **When to introduce Redis:** define the concrete metering-contention metric that trips the trigger in §6.9.
-9. ~~**Encryption model (PRD Q12):** envelope vs E2E?~~ **Resolved: envelope encryption (server-decryptable).** Recovers cleanly on a lost device (E2E cannot without escrow), and is legally sufficient — DPDP Rule 6 mandates encryption + key management, not zero-knowledge. Defensibility rests on the key controls in §7.1 (HSM master key, no standing decrypt access, audit logs), not on irreversibility.
-10. ~~**Account timing (PRD Q13):**~~ **Resolved: at save (PRD v0.4.1).** Scan/verify pre-login; phone-OTP prompted at the "Set my reminders" tap; on verify, the record persists and reminders schedule in the same action. Engineering consequences: pre-login extraction is metered per device (client key + Play Integrity device attestation), converting to the per-user meter after sign-in; the app must tolerate an unauthenticated verify state (extraction result held locally until session exists); OTP failure at save falls back to resend/missed-call verification, and the confirmed record is held in the Room queue so nothing is lost while the user retries.
+6. **Idempotency + poll strategy** *(deferred)*: v1's `/extract` is single-request/response with no polling at all (not even "stays poll") — this question is moot until extraction is async again.
+7. **Retention-token lifecycle** *(deferred)*: rotation, and export-format spec (DPDP portability) — no retention tokens exist in v1.
+8. **When to introduce Redis:** define the concrete metering-contention metric that trips the trigger in §6.9 — applies once per-key metering (engine plane) exists to contend on.
+9. ~~**Encryption model (PRD Q12):** envelope vs E2E?~~ **Resolved: envelope encryption (server-decryptable).** Recovers cleanly on a lost device (E2E cannot without escrow), and is legally sufficient — DPDP Rule 6 mandates encryption + key management, not zero-knowledge. Defensibility rests on the key controls in §7.1 (HSM master key, no standing decrypt access, audit logs), not on irreversibility. Unaffected by the single-DB move (§1, §5).
+10. ~~**Account timing (PRD Q13):**~~ **Reopened and re-resolved: before scan — account-first (v0.4.3), reversing "at save" (v0.4.1).** Phone-OTP sign-in is now the *first* app step; scan/verify/save/schedule all run inside the resulting session, with **persistent login** (a stored session skips sign-in and opens straight to the dashboard; logout clears it). Engineering consequences of the reversal: the pre-login device-metering design (client key + Play Integrity attestation) and the unauthenticated-verify-state handling from v0.2.1 are **dropped** — every extraction call now happens with a session already established, so there's no unauthenticated intermediate state to design around. OTP failure still falls back to resend; the app has one auth state instead of two.
 11. **OTP provider + abuse controls:** ~~SMS Data Processor choice~~ **vendor resolved: Gupshup, SMS only (no WhatsApp OTP)** — contract + DLT registration pending (see CHECKLIST); stub `000000` until then. Still open: OTP rate-limiting/lockout and defence against OTP-pumping / enumeration on the blind index.
 12. **Key rotation:** DEK/master-key rotation policy and re-wrap procedure; refresh-token rotation and session lifetime.
+13. **When does the engine plane come back?** *(new, v0.2.4-draft)* Concrete trigger for re-splitting into engine/consumer databases — the platformisation signal named in PRD §2.5 (partner API demand, B2B volume, or a retained eval set becoming a priority), not a date.
 
 ---
 
@@ -546,11 +600,11 @@ Mirrors the PRD's product open-Qs where they have an engineering dimension, plus
 | Phase | Engineering deliverables |
 |---|---|
 | **0 — Bake-off** | Eval harness; provider benchmark under de-identified data + zero-retention settings; confidence-threshold baseline; **Data Processor agreement** in motion |
-| **1 — Extraction API + consumer backend** | Spring Boot; engine Postgres (jobs `jsonb`, `SKIP LOCKED` queue, `pg_trgm` formulary, provenance); object storage w/ lifecycle expiry; client-key auth + metering; retention-token plumbing; letterhead-strip preprocess. **Consumer plane: phone-OTP auth (blind-indexed phone); separate encrypted Postgres DB (envelope encryption + KMS/HSM); prescription CRUD; delete/export by `userId`** |
-| **2 — Android core** | Capture (+offline queue) → verify (hard gate, empty-input flags, ask-doctor share) → **phone-OTP sign-in at save** → schedule (AC/PC, HS, ongoing) → notify (exact-alarm onboarding + WorkManager fallback) → adherence log; **server-backed store with Room offline cache + sync**; purpose-specific consent; delete/export |
+| **1 — Extraction API + consumer backend** | Spring Boot; **single `rxscan` Postgres database** — stateless `/extract` (no job table, no queue, no formulary, no provenance log in v1; provider-pluggable vision call, Claude default, §2.5); **phone-OTP auth (blind-indexed phone), sign-in first with persistent login; encrypted prescription store (envelope encryption + KMS/HSM); prescription CRUD; delete/export by `userId`**. *(Deferred: engine Postgres — jobs `jsonb`, `SKIP LOCKED` queue, `pg_trgm` formulary, provenance; object storage w/ lifecycle expiry; client-key auth + metering; retention-token plumbing; letterhead-strip preprocess — returns with platformisation.)* |
+| **2 — Android core** | **Phone-OTP sign-in first, with persistent login** → consent → capture (+offline queue) → verify (hard gate, empty-input flags, ask-doctor share) → schedule (AC/PC, HS, ongoing) → notify (exact-alarm onboarding + WorkManager fallback) → adherence log; **server-backed store with Room offline cache + sync**; purpose-specific consent; delete/export |
 | **3 — Polish & safety** | Edge cases; minor-consent path; **erasure completeness test**; breach runbook; non-advisory listing copy review |
-| **4 — Beta** | 20–30 users; instrument §9 metrics **including the confirmed-schedule audit** (the P0 safety metric) |
+| **4 — Beta** | 20–30 users; instrument §9 metrics **including the confirmed-schedule audit** (the P0 safety metric — blocked until the engine plane/retained crops exist to sample against, §7.3) |
 
 ---
 
-*This is a v1 design. The deliberate bias throughout is toward a minimal, contained server footprint: an engine plane that knows no user, and a single separate, encrypted consumer store for the `userId`-keyed record. In a health-data, DPDP-bound system, every byte of identity-linked data is a liability until it is encrypted, minimised, and provably erasable — which is exactly what the consumer-plane design makes it.*
+*This is a v1 design. The deliberate bias throughout is toward a minimal, contained server footprint — for v1, that means **one database, no engine plane at all**, because there's no partner/eval/metering surface to isolate from a single user-only product. The two-plane split — an engine plane that knows no user, and a single separate, encrypted consumer store for the `userId`-keyed record — is deferred, not abandoned: it's the design this doc keeps in full (§1, §5, §6) for the point the product platformises. In a health-data, DPDP-bound system, every byte of identity-linked data is a liability until it is encrypted, minimised, and provably erasable — which is exactly what the single consumer store makes it today, and what the consumer-plane split will make it again once there's an engine plane to separate it from.*

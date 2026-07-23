@@ -43,7 +43,7 @@ public class AuthController {
     }
 
     @PostMapping("/verify")
-    @Transactional(transactionManager = "consumerTxManager")
+    @Transactional(transactionManager = "txManager")
     TokenResponse verify(@RequestBody OtpVerifyBody body) {
         String phone = normalize(body.phone());
         if (!otp.verify(phone, body.otp())) {

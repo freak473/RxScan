@@ -6,14 +6,20 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.util.List;
 
 /**
- * Fuzzy formulary lookup against {@code rxscan_engine.formulary_sku}. Reuses
+ * Fuzzy formulary lookup against {@code formulary_sku}. Reuses
  * {@link MedicineNameParser#normalize(String)} for the match key and the existing
  * {@code idx_formulary_name_trgm} GIN index over active SKUs. See
  * docs/superpowers/specs/2026-07-20-rx-deterministic-parser-design.md §Components 2.
  *
- * <p>A plain collaborator (not a Spring bean): constructed with the engine {@link JdbcTemplate} by
+ * <p>A plain collaborator (not a Spring bean): constructed with a {@link JdbcTemplate} by
  * whoever owns it. Confirming a brand exists raises confidence and resolves a {@code formularyId} —
  * it never edits the displayed name/strength (CLAUDE.md "Never rewrite the read text").
+ *
+ * <p><b>Disabled mode:</b> the {@code formulary_sku} catalog is dropped for now (users-only v1;
+ * platformisation — and the formulary plane with it — deferred). {@link #disabled()} builds a
+ * no-op instance that never touches a database and whose {@link #match} always returns
+ * {@link FormularyMatch#NONE}. The DB-backed constructor is kept for when formulary matching
+ * returns.
  */
 public final class FormularyMatcher {
 
@@ -39,14 +45,22 @@ public final class FormularyMatcher {
         this.engineJdbc = engineJdbc;
     }
 
+    /** No-op matcher: never queries a database, {@link #match} always returns {@link FormularyMatch#NONE}. */
+    public static FormularyMatcher disabled() {
+        return new FormularyMatcher(null);
+    }
+
     /**
      * @param name     the medicine name as written (verbatim); normalized only to build the key
      * @param strength the read strength — unused for matching, kept for a symmetric signature
      * @return the best {@link FormularyMatch}; {@link FormularyMatch#NONE} when there is no
-     *         trigram candidate at all. {@code matched} is true only when the top score reaches
-     *         {@link ParserThresholds#MATCH_HIGH}.
+     *         trigram candidate at all (or when this matcher is {@link #disabled()}). {@code matched}
+     *         is true only when the top score reaches {@link ParserThresholds#MATCH_HIGH}.
      */
     public FormularyMatch match(String name, String strength) {
+        if (engineJdbc == null) {
+            return FormularyMatch.NONE;
+        }
         String key = MedicineNameParser.normalize(name);
         if (key.isBlank()) {
             return FormularyMatch.NONE;

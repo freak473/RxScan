@@ -22,6 +22,10 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
 - **Non-advisory copy**: "your prescription says…", never "you should take…". No inferred indications.
 - **Data minimisation**: phone is the only PII; prescription record encrypted server-side (later phases).
 
+## Do NOT commit — the user reviews and commits
+- **Never run `git commit` or `git push`.** When a change is complete, update this file's Current
+  status and tell the user it's ready to review; they commit themselves. Staging (`git add`) is fine.
+
 ## After every commit — update this file
 - **Every git commit must be followed by a CLAUDE.md update**: refresh "Current status" (+ its
   date), and add/adjust any rules or context the change introduced. A commit without a CLAUDE.md

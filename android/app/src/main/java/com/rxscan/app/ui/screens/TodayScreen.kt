@@ -88,6 +88,7 @@ fun TodayScreen(
     onScanNew: () -> Unit,
     onPreviewReminder: () -> Unit,
     onOpenProgress: () -> Unit,
+    onLogout: () -> Unit,
 ) {
     val context = LocalContext.current
     val status = remember {
@@ -116,6 +117,14 @@ fun TodayScreen(
                 Text("Saturday, 11 July", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Muted)
                 Text("Today", fontFamily = DisplayFamily, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
             }
+            Text(
+                "Log out",
+                fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Muted,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onLogout)
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+            )
             Icon(
                 Icons.Outlined.MonitorHeart,
                 contentDescription = "Open progress",

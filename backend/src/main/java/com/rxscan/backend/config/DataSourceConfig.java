@@ -2,7 +2,6 @@ package com.rxscan.backend.config;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,63 +13,39 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import javax.sql.DataSource;
 
 /**
- * Two datasources against one Postgres server, two databases.
- * The engine plane carries no user identity; the consumer plane is the only place a
- * userId/phone lives (docs/rxscan-tech-design-v0_2_3.md §5). Postgres cannot do
- * cross-database foreign keys, which enforces that firewall at the engine level.
+ * One Postgres database, one datasource. Users-only v1 (platformisation deferred) — the
+ * former engine/consumer two-plane split is gone; everything lives in {@code rxscan}.
  */
 @Configuration
 public class DataSourceConfig {
 
     @Bean
+    @ConfigurationProperties("app.datasource")
+    HikariDataSource dataSource() {
+        return new HikariDataSource();
+    }
+
+    @Bean
+    JdbcTemplate jdbcTemplate(DataSource dataSource) {
+        return new JdbcTemplate(dataSource);
+    }
+
+    @Bean
+    JdbcClient jdbcClient(DataSource dataSource) {
+        return JdbcClient.create(dataSource);
+    }
+
+    @Bean
     @Primary
-    @ConfigurationProperties("app.datasource.engine")
-    HikariDataSource engineDataSource() {
-        return new HikariDataSource();
-    }
-
-    @Bean
-    @ConfigurationProperties("app.datasource.consumer")
-    HikariDataSource consumerDataSource() {
-        return new HikariDataSource();
-    }
-
-    @Bean
-    JdbcTemplate engineJdbc(@Qualifier("engineDataSource") DataSource ds) {
-        return new JdbcTemplate(ds);
-    }
-
-    @Bean
-    JdbcTemplate consumerJdbc(@Qualifier("consumerDataSource") DataSource ds) {
-        return new JdbcTemplate(ds);
-    }
-
-    @Bean
-    JdbcClient consumerJdbcClient(@Qualifier("consumerDataSource") DataSource ds) {
-        return JdbcClient.create(ds);
-    }
-
-    // @Primary would bind a default @Transactional to the engine datasource, not this one —
-    // callers must name this bean explicitly (@Transactional(transactionManager = "consumerTxManager")).
-    @Bean
-    DataSourceTransactionManager consumerTxManager(@Qualifier("consumerDataSource") DataSource ds) {
-        return new DataSourceTransactionManager(ds);
-    }
-
-    // Each database is migrated from its own migration folder at startup.
-    @Bean(initMethod = "migrate")
-    Flyway engineFlyway(@Qualifier("engineDataSource") DataSource ds) {
-        return Flyway.configure()
-                .dataSource(ds)
-                .locations("classpath:db/migration/engine")
-                .load();
+    DataSourceTransactionManager txManager(DataSource dataSource) {
+        return new DataSourceTransactionManager(dataSource);
     }
 
     @Bean(initMethod = "migrate")
-    Flyway consumerFlyway(@Qualifier("consumerDataSource") DataSource ds) {
+    Flyway flyway(DataSource dataSource) {
         return Flyway.configure()
-                .dataSource(ds)
-                .locations("classpath:db/migration/consumer")
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
                 .load();
     }
 }

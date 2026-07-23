@@ -1,6 +1,10 @@
 package com.rxscan.app.ui
 
 import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -9,6 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -18,7 +24,6 @@ import com.rxscan.app.data.PrescriptionRepository
 import com.rxscan.app.data.SyncOutcome
 import com.rxscan.app.data.SyncRepository
 import com.rxscan.app.data.local.RxScanStore
-import com.rxscan.app.data.net.ConsentDto
 import com.rxscan.app.data.net.MealTimesDto
 import com.rxscan.app.data.net.Network
 import com.rxscan.app.data.net.OtpRequestDto
@@ -35,15 +40,15 @@ import com.rxscan.app.ui.screens.ProgressScreen
 import com.rxscan.app.ui.screens.SignInScreen
 import com.rxscan.app.ui.screens.TodayScreen
 import com.rxscan.app.ui.screens.VerifyScreen
-import com.rxscan.app.ui.screens.WelcomeScreen
+import com.rxscan.app.ui.theme.Paper
 import java.time.OffsetDateTime
 import kotlinx.coroutines.launch
 
-// Canonical v1 flow (design prototype + PRD §6, Q13 account-at-save):
-// welcome → consent → capture → extracting → verify → mealtimes
-//         → signin → otp → notifperm → today (⇄ lock preview, ⇄ progress)
+// Login-first v2 flow: a JWT already on-device skips straight to TODAY; otherwise
+// the account is created up front, before any prescription is captured.
+// signin → otp → consent → capture → extracting → verify → mealtimes → notifperm
+//        → today (⇄ lock preview, ⇄ progress)
 private object Routes {
-    const val WELCOME = "welcome"
     const val CONSENT = "consent"
     const val CAPTURE = "capture"
     const val EXTRACTING = "extracting"
@@ -70,10 +75,6 @@ fun RxScanNav() {
     val sync = remember { SyncRepository(context) }
     val gson = remember { Gson() }
 
-    // Hydrate the OkHttp interceptor's synchronous token cache once, at process start
-    // (covers a warm process that's still holding a prior session's JWT).
-    LaunchedEffect(Unit) { store.loadToken() }
-
     // Phone number hoisted here so signin → otp share it.
     var phone by rememberSaveable { mutableStateOf("") }
     // Notification choice hoisted so Today can show the persistent silenced banner (PRD §6.4).
@@ -84,21 +85,61 @@ fun RxScanNav() {
     // Real extracted medicines (from POST /extract), threaded extracting → verify → mealtimes.
     var meds by remember { mutableStateOf<List<com.rxscan.app.data.Medication>>(emptyList()) }
 
-    NavHost(navController = nav, startDestination = Routes.WELCOME) {
-        composable(Routes.WELCOME) {
-            WelcomeScreen(onGetStarted = { nav.navigate(Routes.CONSENT) })
+    // Persistent login: resolve the start destination from a stored JWT before the
+    // NavHost is built at all (also hydrates the OkHttp interceptor's sync token cache).
+    var startRoute by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        startRoute = if (store.loadToken() != null) Routes.TODAY else Routes.SIGNIN
+    }
+
+    val resolvedStart = startRoute
+    if (resolvedStart == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Paper),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    NavHost(navController = nav, startDestination = resolvedStart) {
+        composable(Routes.SIGNIN) {
+            SignInScreen(
+                onBack = {},
+                onSendCode = {
+                    phone = it
+                    scope.launch {
+                        store.savePhone(it)
+                        runCatching { Network.authApi.requestOtp(OtpRequestDto(it)) }
+                    }
+                    nav.navigate(Routes.OTP)
+                },
+            )
+        }
+        composable(Routes.OTP) {
+            OtpScreen(
+                phone = phone,
+                onBack = { nav.popBackStack() },
+                onVerify = { code -> sync.verifyOtp(phone, code) is SyncOutcome.Success },
+                onResend = {
+                    scope.launch { runCatching { Network.authApi.requestOtp(OtpRequestDto(phone)) } }
+                },
+                onVerified = { nav.navigate(Routes.CONSENT) },
+            )
         }
         composable(Routes.CONSENT) {
             ConsentScreen(onContinue = { process, retainOptIn ->
-                // Pre-login consents: held in DataStore until the OTP verify upload
-                // (spec: process/retain_optin piggyback on the verify call).
-                val now = OffsetDateTime.now().toString()
-                val consents = listOf(
-                    ConsentDto("process", process, now),
-                    ConsentDto("retain_optin", retainOptIn, now),
-                )
-                scope.launch { store.saveConsentsJson(gson.toJson(consents)) }
-                nav.navigate(Routes.CAPTURE)
+                scope.launch {
+                    val outcome = sync.pushConsents(process, retainOptIn, OffsetDateTime.now().toString())
+                    if (outcome is SyncOutcome.AuthExpired) {
+                        nav.navigate(Routes.SIGNIN) { popUpTo(0) { inclusive = true } }
+                    } else {
+                        nav.navigate(Routes.CAPTURE)
+                    }
+                }
             })
         }
         composable(Routes.CAPTURE) {
@@ -130,7 +171,7 @@ fun RxScanNav() {
                 onAllConfirmed = { confirmedMeds ->
                     meds = confirmedMeds
                     // The save moment: confirmed meds go to Room now (pendingSync=true,
-                    // rxId=null); the POST fires once OTP verify succeeds (spec: deferred save).
+                    // rxId=null); the POST fires once notif-perm's finalizeSync runs.
                     val payload = confirmedMeds.toMedsPayload(OffsetDateTime.now().toString())
                     scope.launch { prescriptions.saveDraft(gson.toJson(payload)) }
                     nav.navigate(Routes.MEAL_TIMES)
@@ -138,7 +179,6 @@ fun RxScanNav() {
             )
         }
         composable(Routes.MEAL_TIMES) {
-            // "Set my reminders" = the save moment → deferred sign-in (Q13).
             MealTimesScreen(onSave = { breakfast, lunch, dinner ->
                 val payload = PreferencesPayloadDto(
                     mealTimes = MealTimesDto(
@@ -148,52 +188,22 @@ fun RxScanNav() {
                     ),
                 )
                 scope.launch { store.saveMealTimesJson(gson.toJson(payload)) }
-                nav.navigate(Routes.SIGNIN)
+                nav.navigate(Routes.NOTIF_PERM)
             })
-        }
-        composable(Routes.SIGNIN) {
-            SignInScreen(
-                onBack = { nav.popBackStack() },
-                onSendCode = {
-                    phone = it
-                    scope.launch {
-                        store.savePhone(it)
-                        runCatching { Network.authApi.requestOtp(OtpRequestDto(it)) }
-                    }
-                    nav.navigate(Routes.OTP)
-                },
-                // Login is optional (user opted not to force it). Skip straight to
-                // notification setup without an account; nothing is synced server-side.
-                onSkip = {
-                    phone = ""
-                    nav.navigate(Routes.NOTIF_PERM)
-                },
-            )
-        }
-        composable(Routes.OTP) {
-            OtpScreen(
-                phone = phone,
-                onBack = { nav.popBackStack() },
-                onVerify = { code -> sync.verifyOtpAndSync(phone, code) is SyncOutcome.Success },
-                onResend = {
-                    scope.launch { runCatching { Network.authApi.requestOtp(OtpRequestDto(phone)) } }
-                },
-                onVerified = { nav.navigate(Routes.NOTIF_PERM) },
-            )
         }
         composable(Routes.NOTIF_PERM) {
             NotifPermScreen(onResult = { allowed ->
                 // Allow or deny: everything is still saved; denial shows the persistent
                 // silenced banner on Today. The notify consent PUTs either way — a
-                // denial IS the recorded choice (spec: notify consent arrives here).
+                // denial IS the recorded choice.
                 notifAllowed = allowed
                 scope.launch {
-                    val outcome = sync.pushNotifyConsent(allowed, OffsetDateTime.now().toString())
+                    val outcome = sync.finalizeSync(allowed, OffsetDateTime.now().toString())
                     if (outcome is SyncOutcome.AuthExpired) {
                         // Contract rule: any 401 ⇒ clear the token and route to signin.
-                        nav.navigate(Routes.SIGNIN) { popUpTo(Routes.WELCOME) { inclusive = true } }
+                        nav.navigate(Routes.SIGNIN) { popUpTo(0) { inclusive = true } }
                     } else {
-                        nav.navigate(Routes.TODAY) { popUpTo(Routes.WELCOME) { inclusive = true } }
+                        nav.navigate(Routes.TODAY) { popUpTo(0) { inclusive = true } }
                     }
                 }
             })
@@ -204,6 +214,12 @@ fun RxScanNav() {
                 onScanNew = { nav.navigate(Routes.CAPTURE) },
                 onPreviewReminder = { nav.navigate(Routes.LOCK) },
                 onOpenProgress = { nav.navigate(Routes.PROGRESS) },
+                onLogout = {
+                    scope.launch {
+                        store.saveToken(null)
+                        nav.navigate(Routes.SIGNIN) { popUpTo(0) { inclusive = true } }
+                    }
+                },
             )
         }
         composable(Routes.LOCK) {

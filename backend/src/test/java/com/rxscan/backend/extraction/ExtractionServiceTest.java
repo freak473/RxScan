@@ -7,20 +7,9 @@ import com.rxscan.backend.extraction.parse.MedParseResult;
 import com.rxscan.backend.extraction.parse.MedicationParser;
 import com.rxscan.backend.extraction.parse.Pattern;
 import com.rxscan.backend.extraction.parse.VisionMedRaw;
-import com.rxscan.backend.formulary.MedicineNameParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,56 +17,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * {@link ExtractionService} orchestration: a stub vision client feeds raw reads through the real
- * {@link MedicationParser}/{@link FormularyMatcher} against a seeded formulary. Testcontainers
- * pattern + seeding copied from {@code MedicationParserTest}.
+ * {@link MedicationParser}. Formulary matching is disabled (the {@code formulary_sku} catalog was
+ * dropped with the engine plane — users-only v1, platformisation deferred; see CLAUDE.md), so the
+ * parser is built with {@link FormularyMatcher#disabled()} — a plain unit test, no database, no
+ * Testcontainers.
  */
-@SpringBootTest
 class ExtractionServiceTest {
-
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("postgres:16").withUsername("postgres").withPassword("test");
-
-    static {
-        POSTGRES.start();
-        try (Connection c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "postgres", "test");
-             Statement s = c.createStatement()) {
-            s.execute("CREATE DATABASE rxscan_engine");
-            s.execute("CREATE DATABASE rxscan_consumer");
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create test databases", e);
-        }
-    }
-
-    @DynamicPropertySource
-    static void datasources(DynamicPropertyRegistry registry) {
-        String base = "jdbc:postgresql://" + POSTGRES.getHost() + ":" + POSTGRES.getMappedPort(5432) + "/";
-        for (String plane : new String[]{"engine", "consumer"}) {
-            registry.add("app.datasource." + plane + ".jdbc-url", () -> base + "rxscan_" + plane);
-            registry.add("app.datasource." + plane + ".username", () -> "postgres");
-            registry.add("app.datasource." + plane + ".password", () -> "test");
-        }
-    }
-
-    @Autowired
-    @Qualifier("engineJdbc")
-    JdbcTemplate engineJdbc;
 
     private MedicationParser parser;
 
     @BeforeEach
-    void seed() {
-        engineJdbc.update("DELETE FROM formulary_sku");
-        insert("Augmentin 625 Duo Tablet", "GSK", null);
-        insert("Pantocid 40mg Tablet", "Sun Pharma", "40mg");
-        insert("Dolo 650 Tablet", "Micro Labs", null);
-        parser = new MedicationParser(new FormularyMatcher(engineJdbc));
-    }
-
-    private void insert(String brandName, String mfr, String strength) {
-        engineJdbc.update(
-                "INSERT INTO formulary_sku (brand_name, manufacturer, strength, form, name_normalized) "
-                        + "VALUES (?, ?, ?, ?, ?)",
-                brandName, mfr, strength, "Tablet", MedicineNameParser.normalize(brandName));
+    void setUp() {
+        parser = new MedicationParser(FormularyMatcher.disabled());
     }
 
     private static FieldConfidence high() {
@@ -98,7 +49,7 @@ class ExtractionServiceTest {
 
         MedParseResult augmentin = results.get(0);
         assertThat(augmentin.drug().value()).isEqualTo("Augmentin 625 Duo");
-        assertThat(augmentin.drug().formularyId()).isNotNull();
+        assertThat(augmentin.drug().formularyId()).isNull(); // formulary matching disabled
         assertThat(augmentin.flags()).isEmpty();
 
         MedParseResult dolo = results.get(1);

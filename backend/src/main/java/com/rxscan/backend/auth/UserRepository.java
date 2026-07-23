@@ -1,6 +1,5 @@
 package com.rxscan.backend.auth;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -19,7 +18,7 @@ public class UserRepository {
 
     private final JdbcClient jdbc;
 
-    public UserRepository(@Qualifier("consumerJdbcClient") JdbcClient jdbc) {
+    public UserRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 

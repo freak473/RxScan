@@ -1,7 +1,6 @@
 package com.rxscan.backend.consent;
 
 import com.rxscan.backend.auth.ApiException;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -16,7 +15,7 @@ public class ConsentRepository {
 
     private final JdbcClient jdbc;
 
-    public ConsentRepository(@Qualifier("consumerJdbcClient") JdbcClient jdbc) {
+    public ConsentRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 

@@ -52,7 +52,7 @@ import com.rxscan.app.ui.theme.White
  * Phone is the only detail collected — no name, no email.
  */
 @Composable
-fun SignInScreen(onBack: () -> Unit, onSendCode: (String) -> Unit, onSkip: () -> Unit) {
+fun SignInScreen(onBack: () -> Unit, onSendCode: (String) -> Unit) {
     var phone by rememberSaveable { mutableStateOf("") }
     val valid = phone.length == 10
 
@@ -163,19 +163,6 @@ fun SignInScreen(onBack: () -> Unit, onSendCode: (String) -> Unit, onSkip: () ->
 
         Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp)) {
             PrimaryButton("Send code", onClick = { onSendCode(phone) }, enabled = valid)
-            Spacer(Modifier.height(6.dp))
-            // Sign-in is optional — the user can set up reminders without an account.
-            // Skipping means nothing is saved to sync across phones (UI pass; no backend).
-            Text(
-                "Skip for now",
-                fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Muted,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable(onClick = onSkip)
-                    .padding(vertical = 12.dp),
-            )
         }
     }
 }

@@ -1,36 +1,29 @@
 package com.rxscan.backend.web;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** Proves both databases are reachable — the foundation slice's acceptance check. */
+/** Proves the database is reachable — the foundation slice's acceptance check. */
 @RestController
 public class HealthController {
 
-    private final JdbcTemplate engine;
-    private final JdbcTemplate consumer;
+    private final JdbcTemplate jdbc;
 
-    HealthController(@Qualifier("engineJdbc") JdbcTemplate engine,
-                    @Qualifier("consumerJdbc") JdbcTemplate consumer) {
-        this.engine = engine;
-        this.consumer = consumer;
+    HealthController(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     @GetMapping("/health")
     Map<String, String> health() {
-        return Map.of(
-                "engine", ping(engine),
-                "consumer", ping(consumer)
-        );
+        return Map.of("database", ping());
     }
 
-    private String ping(JdbcTemplate db) {
+    private String ping() {
         try {
-            db.queryForObject("SELECT 1", Integer.class);
+            jdbc.queryForObject("SELECT 1", Integer.class);
             return "up";
         } catch (Exception e) {
             return "down: " + e.getMessage();
