@@ -3,6 +3,8 @@ package com.rxscan.app.data.net
 import okhttp3.Interceptor
 import okhttp3.Response
 
+// Adds Bearer token to /v1/me/** and /v1/prescriptions/** routes only.
+// /extract and /v1/auth/** stay open. Reads TokenCache for the JWT.
 class AuthInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
@@ -18,6 +20,8 @@ class AuthInterceptor : Interceptor {
     }
 }
 
+// Synchronous mirror of the JWT, updated by RxScanStore (Task 3).
+// DataStore is Flow-based; OkHttp interceptors run on plain threads.
 object TokenCache {
     @Volatile var current: String? = null
 }
