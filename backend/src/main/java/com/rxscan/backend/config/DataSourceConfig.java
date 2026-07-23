@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
 import javax.sql.DataSource;
 
@@ -41,6 +43,18 @@ public class DataSourceConfig {
     @Bean
     JdbcTemplate consumerJdbc(@Qualifier("consumerDataSource") DataSource ds) {
         return new JdbcTemplate(ds);
+    }
+
+    @Bean
+    JdbcClient consumerJdbcClient(@Qualifier("consumerDataSource") DataSource ds) {
+        return JdbcClient.create(ds);
+    }
+
+    // @Primary would bind a default @Transactional to the engine datasource, not this one —
+    // callers must name this bean explicitly (@Transactional(transactionManager = "consumerTxManager")).
+    @Bean
+    DataSourceTransactionManager consumerTxManager(@Qualifier("consumerDataSource") DataSource ds) {
+        return new DataSourceTransactionManager(ds);
     }
 
     // Each database is migrated from its own migration folder at startup.

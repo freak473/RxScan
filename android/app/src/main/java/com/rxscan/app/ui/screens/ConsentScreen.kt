@@ -51,7 +51,7 @@ import com.rxscan.app.ui.theme.White
  * DEFAULT OFF; the under-18 toggle locks retention until a guardian confirms.
  */
 @Composable
-fun ConsentScreen(onContinue: () -> Unit) {
+fun ConsentScreen(onContinue: (process: Boolean, retainOptIn: Boolean) -> Unit) {
     var processOn by rememberSaveable { mutableStateOf(false) }
     var retainOn by rememberSaveable { mutableStateOf(false) }
     var minorOn by rememberSaveable { mutableStateOf(false) }
@@ -145,7 +145,7 @@ fun ConsentScreen(onContinue: () -> Unit) {
         Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 18.dp)) {
             PrimaryButton(
                 text = if (processOn) "Agree & continue" else "Turn on the first permission",
-                onClick = onContinue,
+                onClick = { onContinue(processOn, effectiveRetain) },
                 enabled = processOn,
             )
         }

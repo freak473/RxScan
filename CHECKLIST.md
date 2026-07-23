@@ -31,6 +31,8 @@ The rest is polish. A user can't actually *use* RxScan until these three land:
 - [x] Request validation (empty / type / 10MB) + error mapping (503 unavailable, 502 upstream)
 - [x] Formulary loader
 - [x] Unit tests (parser, controller, service, vision clients) — all mocked, **no live AI calls** (per CLAUDE.md)
+- [x] **OTP / sign-in endpoint** — `/v1/auth/otp/request` + `/v1/auth/otp/verify`, blind-indexed phone, 30-day JWT, stub OTP `000000`; contract in `docs/api-contract-v1.md`
+- [x] **Persist prescription** — `POST/PATCH /v1/prescriptions` + `GET ?since=`, encrypted payload blob per rx (DPDP); contract in `docs/api-contract-v1.md`
 
 **Android (Compose)**
 - [x] All 12 design screens built + verified on-emulator against the v3 prototype
@@ -48,8 +50,6 @@ The rest is polish. A user can't actually *use* RxScan until these three land:
 ## 🚧 Pending
 
 ### Backend
-- [ ] **OTP / sign-in endpoint** (send code → verify → session), blind-indexed phone per schema — _owner:__ · M
-- [ ] **Persist prescription** to consumer DB (encrypted BYTEA payload — DPDP) on save — _owner:__ · M
 - [ ] **Reminders / adherence API** — save schedule; log taken / snooze / skip — _owner:__ · M
 - [ ] Client-key auth on `/extract` (currently open) + usage metering wired to engine DB — _owner:__ · M
 - [ ] Retention + correction capture wired (schema exists, nothing writes to it) — _owner:__ · S
@@ -59,7 +59,7 @@ The rest is polish. A user can't actually *use* RxScan until these three land:
 - [ ] **Alarm scheduling** — reminders actually fire at dose times — _owner:__ · L
 - [ ] **Real permission requests** — POST_NOTIFICATIONS + exact-alarm (mocked inline now) — _owner:__ · S
 - [ ] **Room cache / persistence** — meds live in `remember`, lost on process death; Today/Progress run on sample data — _owner:__ · M
-- [ ] Sign-in / OTP wired to real backend (UI-only today — see `RxScanNav.kt`) — _owner:__ · M
+- [ ] Sign-in / OTP wired to real backend (UI-only today — see `RxScanNav.kt`; backend contract is `docs/api-contract-v1.md`) — _owner:__ · M
 - [ ] Error states: honest-failure (unreadable image), offline banner, toasts on save/deny (OTP error done) — _owner:__ · M
 - [ ] Physical-device base URL — hardcoded emulator `10.0.2.2` in `Network.kt`; needs LAN IP / build flavor — _owner:__ · S
 - [ ] Welcome-screen subcopy clips behind CTA on 320dp AVD (see CLAUDE.md "Watch") — _owner:__ · S

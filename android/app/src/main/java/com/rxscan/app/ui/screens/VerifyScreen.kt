@@ -92,7 +92,7 @@ import java.util.Locale
  *    system value (CDSCO: flag, don't correct).
  */
 @Composable
-fun VerifyScreen(meds: List<Medication>, onAllConfirmed: () -> Unit) {
+fun VerifyScreen(meds: List<Medication>, onAllConfirmed: (List<Medication>) -> Unit) {
     var confirmed by rememberSaveable { mutableStateOf(setOf<String>()) }
     var resolved by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var nameEdits by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
@@ -213,7 +213,18 @@ fun VerifyScreen(meds: List<Medication>, onAllConfirmed: () -> Unit) {
             )
             PrimaryButton(
                 text = if (allConfirmed) "Continue — set meal times" else "Confirm each medicine to continue",
-                onClick = onAllConfirmed,
+                onClick = {
+                    val finalMeds = meds.map { med ->
+                        med.copy(
+                            name = nameEdits[med.id] ?: med.name,
+                            strength = displayStrength(med, resolved[med.id], strengthEdits[med.id]),
+                            schedule = scheduleEdits[med.id] ?: med.schedule,
+                            food = foodEdits[med.id] ?: med.food,
+                            duration = displayDuration(med, resolved[med.id], durationEdits[med.id]),
+                        )
+                    }
+                    onAllConfirmed(finalMeds)
+                },
                 enabled = allConfirmed,
             )
         }

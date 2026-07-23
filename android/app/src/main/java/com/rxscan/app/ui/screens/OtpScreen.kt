@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rxscan.app.ui.components.PrimaryButton
 import com.rxscan.app.ui.theme.DisplayFamily
-import com.rxscan.app.ui.theme.Faint
 import com.rxscan.app.ui.theme.Green
 import com.rxscan.app.ui.theme.GreenSoft
 import com.rxscan.app.ui.theme.Muted
@@ -52,18 +52,28 @@ import com.rxscan.app.ui.theme.RxRed
 import com.rxscan.app.ui.theme.TextPrimary
 import com.rxscan.app.ui.theme.White
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * OTP (design: scr-otp). One-time code verifies the number and creates the
  * account; on success the reminders schedule immediately — the ask-reward loop
- * is seconds long. Demo behavior per the design: any 6 digits verify; 000000
- * shows the error state.
+ * is seconds long. [onVerify] calls the real POST /v1/auth/otp/verify (via
+ * SyncRepository) and returns whether it succeeded; [onResend] re-fires
+ * POST /v1/auth/otp/request. Dev stub OTP is 000000 (rxscan.auth.dev-otp).
  */
 @Composable
-fun OtpScreen(phone: String, onBack: () -> Unit, onVerified: () -> Unit) {
+fun OtpScreen(
+    phone: String,
+    onBack: () -> Unit,
+    onVerify: suspend (code: String) -> Boolean,
+    onResend: () -> Unit,
+    onVerified: () -> Unit,
+) {
     var code by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf(false) }
+    var verifying by rememberSaveable { mutableStateOf(false) }
     var secondsLeft by rememberSaveable { mutableIntStateOf(30) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(secondsLeft > 0) {
         while (secondsLeft > 0) {
@@ -196,6 +206,7 @@ fun OtpScreen(phone: String, onBack: () -> Unit, onVerified: () -> Unit) {
                             code = ""
                             error = false
                             secondsLeft = 30
+                            onResend()
                         }
                         .padding(vertical = 4.dp),
                 )
@@ -217,23 +228,20 @@ fun OtpScreen(phone: String, onBack: () -> Unit, onVerified: () -> Unit) {
                     fontSize = 13.sp, lineHeight = 19.sp, color = TextPrimary,
                 )
             }
-
-            Spacer(Modifier.height(14.dp))
-            Text(
-                "Demo: any 6 digits verify · type 000000 to see the error state",
-                fontSize = 12.sp, color = Faint,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
 
         Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp)) {
             PrimaryButton(
-                "Verify",
+                if (verifying) "Verifying…" else "Verify",
                 onClick = {
-                    if (code == "000000") error = true else onVerified()
+                    verifying = true
+                    scope.launch {
+                        val ok = onVerify(code)
+                        verifying = false
+                        if (ok) onVerified() else error = true
+                    }
                 },
-                enabled = code.length == 6,
+                enabled = code.length == 6 && !verifying,
             )
         }
     }

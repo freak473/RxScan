@@ -41,6 +41,9 @@ class ExtractionControllerTest {
     @MockitoBean
     private ExtractionService extractionService;
 
+    @MockitoBean
+    private com.rxscan.backend.auth.JwtService jwtService;
+
     private static MedParseResult oneMed() {
         return new MedParseResult(
                 new MedParseResult.Drug("Augmentin 625 Duo", 1L, 0.95),
