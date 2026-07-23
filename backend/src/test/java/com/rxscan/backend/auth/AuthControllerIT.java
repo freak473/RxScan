@@ -66,4 +66,12 @@ class AuthControllerIT extends ConsumerApiTestBase {
         String claims = new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
         assertThat(claims).matches(".*\"sub\":\"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\".*");
     }
+
+    @Test
+    void invalidConsentPurposeIs422() throws Exception {
+        mvc.perform(post("/v1/auth/otp/verify").contentType(APPLICATION_JSON)
+                        .content("{\"phone\":\"9876500009\",\"otp\":\"000000\",\"consents\":[{\"purpose\":\"marketing\",\"granted\":true,\"granted_at\":\"2026-07-23T10:00:00+05:30\"}]}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("invalid_consent"));
+    }
 }

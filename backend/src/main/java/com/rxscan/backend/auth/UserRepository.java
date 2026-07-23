@@ -33,12 +33,14 @@ public class UserRepository {
                 .param("pid", publicId).query(ROW).optional();
     }
 
-    public UserRow create(byte[] phoneEnc, byte[] blindIdx, byte[] dekWrapped) {
+    /** Empty when a concurrent verify won the race on phone_blind_idx first (caller re-reads). */
+    public Optional<UserRow> tryCreate(byte[] phoneEnc, byte[] blindIdx, byte[] dekWrapped) {
         return jdbc.sql("""
                         INSERT INTO users (phone_enc, phone_blind_idx, dek_wrapped)
                         VALUES (:phone, :idx, :dek)
+                        ON CONFLICT (phone_blind_idx) DO NOTHING
                         RETURNING user_id, public_id, dek_wrapped""")
                 .param("phone", phoneEnc).param("idx", blindIdx).param("dek", dekWrapped)
-                .query(ROW).single();
+                .query(ROW).optional();
     }
 }

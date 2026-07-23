@@ -3,6 +3,7 @@ package com.rxscan.backend.auth;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.rxscan.backend.consent.ConsentDto;
 import com.rxscan.backend.consent.ConsentRepository;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,20 +43,24 @@ public class AuthController {
     }
 
     @PostMapping("/verify")
+    @Transactional(transactionManager = "consumerTxManager")
     TokenResponse verify(@RequestBody OtpVerifyBody body) {
         String phone = normalize(body.phone());
         if (!otp.verify(phone, body.otp())) {
             throw new ApiException(401, "invalid_otp", "OTP did not match");
         }
         byte[] blindIdx = crypto.blindIndex(phone);
-        boolean created = false;
         UserRepository.UserRow user = users.findByBlindIndex(blindIdx).orElse(null);
+        boolean created = false;
         if (user == null) {
-            user = users.create(
+            user = users.tryCreate(
                     crypto.encryptWithMaster(phone.getBytes(StandardCharsets.UTF_8)),
                     blindIdx,
-                    crypto.wrapDek(crypto.newDek()));
-            created = true;
+                    crypto.wrapDek(crypto.newDek())).orElse(null);
+            created = user != null;
+            if (user == null) {   // concurrent verify created it first
+                user = users.findByBlindIndex(blindIdx).orElseThrow();
+            }
         }
         for (ConsentDto c : body.consents() == null ? List.<ConsentDto>of() : body.consents()) {
             consents.insert(user.userId(), c.purpose(), c.granted(), c.grantedAt());
