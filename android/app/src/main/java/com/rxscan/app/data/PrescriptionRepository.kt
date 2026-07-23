@@ -2,14 +2,16 @@ package com.rxscan.app.data
 
 import android.content.Context
 import androidx.room.Room
+import com.rxscan.app.data.local.MIGRATION_1_2
 import com.rxscan.app.data.local.PrescriptionEntity
 import com.rxscan.app.data.local.RxScanDatabase
 import java.time.OffsetDateTime
 
-private object RxScanDatabaseHolder {
+internal object RxScanDatabaseHolder {
     @Volatile private var instance: RxScanDatabase? = null
     fun get(context: Context): RxScanDatabase = instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(context.applicationContext, RxScanDatabase::class.java, "rxscan.db")
+            .addMigrations(MIGRATION_1_2)
             .build().also { instance = it }
     }
 }
@@ -36,5 +38,11 @@ class PrescriptionRepository(context: Context) {
 
     suspend fun markSynced(localId: Long, rxId: String, updatedAt: String) {
         dao.markSynced(localId, rxId, updatedAt)
+    }
+
+    suspend fun all(): List<PrescriptionEntity> = dao.all()
+
+    suspend fun updatePayload(localId: Long, payloadJson: String, updatedAt: String) {
+        dao.updatePayload(localId, payloadJson, updatedAt)
     }
 }

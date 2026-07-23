@@ -14,4 +14,10 @@ interface PrescriptionDao {
 
     @Query("UPDATE prescriptions SET rxId = :rxId, pendingSync = 0, updatedAt = :updatedAt WHERE localId = :localId")
     suspend fun markSynced(localId: Long, rxId: String, updatedAt: String)
+
+    @Query("SELECT * FROM prescriptions")
+    suspend fun all(): List<PrescriptionEntity>
+
+    @Query("UPDATE prescriptions SET payloadJson = :payloadJson, updatedAt = :updatedAt WHERE localId = :localId")
+    suspend fun updatePayload(localId: Long, payloadJson: String, updatedAt: String)
 }
