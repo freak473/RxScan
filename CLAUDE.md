@@ -74,8 +74,7 @@ POST_NOTIFICATIONS + skippable exact-alarm Settings step, grouped discreet notif
 channels), adherence log in Room synced inside the opaque payload (no new backend endpoints),
 course auto-stop, Today/Progress rewired to real doses. Spec:
 `docs/superpowers/specs/2026-07-23-reminder-plane-design.md`. Plan:
-`docs/superpowers/plans/2026-07-23-reminder-plane.md` (7 tasks, TDD, exact code). Next: execute
-the plan task-by-task.
+`docs/superpowers/plans/2026-07-23-reminder-plane.md` (7 tasks, TDD, exact code). Plan Task 1 (DosePlan) done — pure dose arithmetic with 12 JVM tests.
 
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
