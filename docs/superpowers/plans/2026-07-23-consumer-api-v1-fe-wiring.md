@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-> **PROGRESS (2026-07-23):** Tasks 1–5 committed on `fe/consumer-wiring`. **Resume at Task 6.**
+> **PROGRESS (2026-07-23):** Tasks 1–6 committed on `fe/consumer-wiring`. **Resume at Task 7** (final build + manual emulator smoke — needs the backend running locally).
 
 **Goal:** Wire the RxScan Android app to the consumer API v1 backend
 (`docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md`, `docs/api-contract-v1.md`):

@@ -65,7 +65,7 @@ private fun fmt(mins: Int): String {
 }
 
 @Composable
-fun MealTimesScreen(onSave: () -> Unit) {
+fun MealTimesScreen(onSave: (breakfast: Int, lunch: Int, dinner: Int) -> Unit) {
     var breakfast by rememberSaveable { mutableIntStateOf(480) }
     var lunch by rememberSaveable { mutableIntStateOf(810) }
     var dinner by rememberSaveable { mutableIntStateOf(1230) }
@@ -155,7 +155,7 @@ fun MealTimesScreen(onSave: () -> Unit) {
         }
 
         Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp)) {
-            PrimaryButton("Set my reminders", onClick = onSave)
+            PrimaryButton("Set my reminders", onClick = { onSave(breakfast, lunch, dinner) })
         }
     }
 }
