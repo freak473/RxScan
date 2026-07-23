@@ -77,6 +77,9 @@ fun RxScanNav() {
 
     // Phone number hoisted here so signin → otp share it.
     var phone by rememberSaveable { mutableStateOf("") }
+    // Whether OTP verify created a NEW account (backend user_created). Set in onVerify,
+    // read in onVerified to route: new user → consent onboarding; returning user → today.
+    var isNewUser by rememberSaveable { mutableStateOf(false) }
     // Notification choice hoisted so Today can show the persistent silenced banner (PRD §6.4).
     var notifAllowed by rememberSaveable { mutableStateOf(true) }
     // Captured/picked prescription image, threaded capture → extracting. Plain remember:
@@ -123,11 +126,26 @@ fun RxScanNav() {
             OtpScreen(
                 phone = phone,
                 onBack = { nav.popBackStack() },
-                onVerify = { code -> sync.verifyOtp(phone, code) is SyncOutcome.Success },
+                onVerify = { code ->
+                    when (val outcome = sync.verifyOtp(phone, code)) {
+                        is SyncOutcome.Success -> { isNewUser = outcome.userCreated; true }
+                        else -> false
+                    }
+                },
                 onResend = {
                     scope.launch { runCatching { Network.authApi.requestOtp(OtpRequestDto(phone)) } }
                 },
-                onVerified = { nav.navigate(Routes.CONSENT) },
+                onVerified = {
+                    if (isNewUser) {
+                        // New account: run consent → capture onboarding.
+                        nav.navigate(Routes.CONSENT)
+                    } else {
+                        // Returning user: account + consents already exist server-side —
+                        // skip onboarding and land on the dashboard. Clear the back stack so
+                        // Back can't return to OTP/signin.
+                        nav.navigate(Routes.TODAY) { popUpTo(0) { inclusive = true } }
+                    }
+                },
             )
         }
         composable(Routes.CONSENT) {
