@@ -6,7 +6,7 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
 
 ## Source of truth
 - `docs/prescription-reminders-prd-v0_4_2.md` — product PRD (requirements closed)
-- `docs/rxscan-tech-design-v0_2_2.md` — engineering design (two-plane architecture, DB choices)
+- `docs/rxscan-tech-design-v0_2_3.md` — engineering design (two-plane architecture, DB choices)
 - `docs/RxScan-v2-design-v3.html` — interactive UI prototype (the visual design system)
 
 ## Repo layout
@@ -22,13 +22,34 @@ non-advisory *scribe* (stays outside India's SaMD/CDSCO regime); DPDP-compliant 
 - **Non-advisory copy**: "your prescription says…", never "you should take…". No inferred indications.
 - **Data minimisation**: phone is the only PII; prescription record encrypted server-side (later phases).
 
+## After every commit — update this file
+- **Every git commit must be followed by a CLAUDE.md update**: refresh "Current status" (+ its
+  date), and add/adjust any rules or context the change introduced. A commit without a CLAUDE.md
+  update is an unfinished commit.
+
+## Backend IDs — sequential ids are internal-only
+- `app_user.user_id` is a sequential BIGINT identity — fine as an internal PK/FK, but it is
+  enumerable. **Never expose it in client-facing API paths, URLs, or tokens** (`/users/42` leaks
+  user count and invites IDOR probing). Anything the client sees must use an opaque id
+  (UUID/random token). Same rule for any future sequential id.
+
 ## Backend testing — no live AI calls
 - **Never write automated tests that hit a real vision/AI API.** Free provider quota is limited and
   scarce. Mock the provider instead (`MockRestServiceServer`, canned response bodies) and unit-test
   the request shape, `parseResponse`, and error mapping. Real extraction accuracy is validated
   **manually via the app** (capture → `POST /extract`), not in the test suite.
 
-## Current status (last updated 2026-07-16)
+## Current status (last updated 2026-07-23)
+**Backend consumer plane:** schema reworked (`app_user`→`users`, BIGINT identity ids,
+`user_consent` + `user_preference` tables, `created_at`/`updated_at` + `set_updated_at()` trigger
+everywhere, both DBs re-provisioned). Consumer API v1 design approved →
+`docs/superpowers/specs/2026-07-23-consumer-api-v1-design.md` (OTP stub `000000` default,
+`GupshupOtpSender` config-gated — SMS only, no WhatsApp; JWT sub = `users.public_id`, opaque
+payload). **Implementation plan ready:** `docs/superpowers/plans/2026-07-23-consumer-api-v1-slice-a.md`
+(backend slice A; FE wiring is a follow-up plan). Tech design bumped to **v0.2.3**
+(`docs/rxscan-tech-design-v0_2_3.md`) — consumer schema/contract sections now match the spec.
+Post-commit hook in `.claude/settings.local.json` enforces the CLAUDE.md-update rule.
+
 **Phase 2 (Android) — UI pass COMPLETE: all 12 design screens built + verified on-emulator
 against `RxScan-v2-design-v3.html` (screenshot walkthrough of the full flow).**
 
@@ -69,6 +90,8 @@ the 320dp-wide light AVD (Kalam's tall metrics grew the rx card) — candidate f
   (system) — user was going to `sudo rm` it.
 - **Android SDK**: `~/Library/Android/sdk` (only platform `android-36`, build-tools `36.0.0` installed).
 - **Postgres 16**: installed via brew, running (`brew services`). For the backend phase.
+- **Backend builds**: use system `mvn` (3.9.16) — `backend/mvnw` is broken on this machine (its
+  wget links a deleted brew dylib and the wrapper tries to re-download Maven).
 - **Node**: brew node 26.5.0 (2026-07-18), fully brew-linked; old 2019 node-pkg remnants removed.
   npm global prefix is the Cellar keg, so `npm -g` bins land in `Cellar/node/*/bin` (prefer `npx`).
 - Docker Desktop: optional / user's call (redundant with native Postgres for v1).
