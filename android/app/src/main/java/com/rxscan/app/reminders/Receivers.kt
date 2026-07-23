@@ -16,6 +16,10 @@ private fun BroadcastReceiver.async(block: suspend () -> Unit) {
     CoroutineScope(Dispatchers.IO).launch {
         try {
             block()
+        } catch (e: Exception) {
+            // A malformed stored payload or notify failure must not crash the alarm path
+            // (that would kill the chain before it re-arms). Log and move on.
+            android.util.Log.e("RxScanReminders", "receiver work failed", e)
         } finally {
             pending.finish()
         }

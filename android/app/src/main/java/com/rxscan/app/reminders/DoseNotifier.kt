@@ -93,12 +93,18 @@ object DoseNotifier {
         if (!nm.areNotificationsEnabled()) return
         ensureChannels(context)
         val names = medNames.joinToString(" · ")
+        val publicNotice = NotificationCompat.Builder(context, CHANNEL_COURSE)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("A course ends tomorrow")
+            .build()
         nm.notify(
             ("notice:$names").hashCode(),
             NotificationCompat.Builder(context, CHANNEL_COURSE)
                 .setSmallIcon(android.R.drawable.ic_popup_reminder)
                 .setContentTitle("Course ends tomorrow")
                 .setContentText("Your $names course ends tomorrow.")
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setPublicVersion(publicNotice)
                 .setAutoCancel(true)
                 .build(),
         )
