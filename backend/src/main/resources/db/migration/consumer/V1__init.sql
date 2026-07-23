@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;      -- gen_random_uuid()
 -- the only PII, minimised ---------------------------------------------------
 CREATE TABLE users (                          -- bare "user" is reserved in Postgres
     user_id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    public_id         UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),  -- the ONLY id a client ever sees (JWT sub)
     phone_enc         BYTEA NOT NULL,          -- ciphertext; plaintext only in the OTP request
     phone_blind_idx   BYTEA NOT NULL UNIQUE,   -- keyed-HMAC of phone; the login lookup key
     dek_wrapped       BYTEA NOT NULL,          -- per-user data key, wrapped by the KMS master key
